@@ -1,0 +1,300 @@
+{
+  "generatedAt": "2026-09-10T22:55:02.149Z",
+  "config": {
+    "participants": 40,
+    "receipts": 200,
+    "workers": 4,
+    "extractor": "simulator (does not read pixels)",
+    "transport": "simulator"
+  },
+  "timings": {
+    "setupMs": 9678,
+    "enqueueMs": 118,
+    "processMs": 21110,
+    "eventsPerSecond": 11.4,
+    "receiptsPerSecond": 9.5
+  },
+  "latencyMs": {
+    "inboundToProcessed": {
+      "p50": 9142,
+      "p95": 16916,
+      "max": 17655
+    },
+    "intakeToDecision": {
+      "p50": 10161,
+      "p95": 16697,
+      "max": 17316
+    }
+  },
+  "correctness": {
+    "submissions": 200,
+    "qualified": 180,
+    "duplicate": 20,
+    "other": 0,
+    "entries": 180,
+    "canonicalReceipts": 180,
+    "distinctReceiptsSent": 180,
+    "exactlyOnce": true,
+    "deadEvents": 0,
+    "failedEvents": 0,
+    "deadJobs": 0,
+    "jobsTotal": 200,
+    "outbox": {
+      "sent": 920
+    }
+  },
+  "queueDepth": [
+    {
+      "t": 625,
+      "events": 236,
+      "jobs": 4,
+      "outbox": 4
+    },
+    {
+      "t": 1129,
+      "events": 232,
+      "jobs": 8,
+      "outbox": 8
+    },
+    {
+      "t": 1635,
+      "events": 225,
+      "jobs": 15,
+      "outbox": 15
+    },
+    {
+      "t": 2135,
+      "events": 220,
+      "jobs": 20,
+      "outbox": 20
+    },
+    {
+      "t": 2639,
+      "events": 216,
+      "jobs": 24,
+      "outbox": 24
+    },
+    {
+      "t": 3142,
+      "events": 208,
+      "jobs": 32,
+      "outbox": 32
+    },
+    {
+      "t": 3640,
+      "events": 204,
+      "jobs": 36,
+      "outbox": 36
+    },
+    {
+      "t": 4141,
+      "events": 196,
+      "jobs": 44,
+      "outbox": 44
+    },
+    {
+      "t": 4646,
+      "events": 192,
+      "jobs": 48,
+      "outbox": 48
+    },
+    {
+      "t": 5159,
+      "events": 187,
+      "jobs": 53,
+      "outbox": 53
+    },
+    {
+      "t": 5646,
+      "events": 180,
+      "jobs": 60,
+      "outbox": 60
+    },
+    {
+      "t": 6144,
+      "events": 176,
+      "jobs": 64,
+      "outbox": 64
+    },
+    {
+      "t": 6652,
+      "events": 168,
+      "jobs": 72,
+      "outbox": 72
+    },
+    {
+      "t": 7151,
+      "events": 164,
+      "jobs": 76,
+      "outbox": 76
+    },
+    {
+      "t": 7650,
+      "events": 156,
+      "jobs": 84,
+      "outbox": 84
+    },
+    {
+      "t": 8159,
+      "events": 152,
+      "jobs": 88,
+      "outbox": 88
+    },
+    {
+      "t": 8655,
+      "events": 145,
+      "jobs": 95,
+      "outbox": 95
+    },
+    {
+      "t": 9154,
+      "events": 140,
+      "jobs": 100,
+      "outbox": 100
+    },
+    {
+      "t": 9658,
+      "events": 135,
+      "jobs": 105,
+      "outbox": 105
+    },
+    {
+      "t": 10158,
+      "events": 128,
+      "jobs": 112,
+      "outbox": 112
+    },
+    {
+      "t": 10663,
+      "events": 124,
+      "jobs": 116,
+      "outbox": 116
+    },
+    {
+      "t": 11157,
+      "events": 116,
+      "jobs": 124,
+      "outbox": 124
+    },
+    {
+      "t": 11672,
+      "events": 112,
+      "jobs": 128,
+      "outbox": 128
+    },
+    {
+      "t": 12167,
+      "events": 104,
+      "jobs": 136,
+      "outbox": 136
+    },
+    {
+      "t": 12668,
+      "events": 100,
+      "jobs": 140,
+      "outbox": 140
+    },
+    {
+      "t": 13174,
+      "events": 94,
+      "jobs": 146,
+      "outbox": 146
+    },
+    {
+      "t": 13668,
+      "events": 88,
+      "jobs": 152,
+      "outbox": 152
+    },
+    {
+      "t": 14180,
+      "events": 84,
+      "jobs": 156,
+      "outbox": 156
+    },
+    {
+      "t": 14682,
+      "events": 76,
+      "jobs": 164,
+      "outbox": 164
+    },
+    {
+      "t": 15186,
+      "events": 72,
+      "jobs": 169,
+      "outbox": 169
+    },
+    {
+      "t": 15690,
+      "events": 64,
+      "jobs": 176,
+      "outbox": 176
+    },
+    {
+      "t": 16187,
+      "events": 60,
+      "jobs": 180,
+      "outbox": 180
+    },
+    {
+      "t": 16683,
+      "events": 53,
+      "jobs": 188,
+      "outbox": 188
+    },
+    {
+      "t": 17194,
+      "events": 48,
+      "jobs": 192,
+      "outbox": 192
+    },
+    {
+      "t": 17687,
+      "events": 44,
+      "jobs": 196,
+      "outbox": 196
+    },
+    {
+      "t": 18197,
+      "events": 40,
+      "jobs": 168,
+      "outbox": 228
+    },
+    {
+      "t": 18685,
+      "events": 40,
+      "jobs": 132,
+      "outbox": 264
+    },
+    {
+      "t": 19185,
+      "events": 40,
+      "jobs": 97,
+      "outbox": 300
+    },
+    {
+      "t": 19683,
+      "events": 40,
+      "jobs": 61,
+      "outbox": 336
+    },
+    {
+      "t": 20188,
+      "events": 40,
+      "jobs": 26,
+      "outbox": 371
+    },
+    {
+      "t": 20682,
+      "events": 40,
+      "jobs": 0,
+      "outbox": 330
+    },
+    {
+      "t": 21183,
+      "events": 0,
+      "jobs": 0,
+      "outbox": 31
+    }
+  ]
+}

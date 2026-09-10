@@ -48,7 +48,7 @@ export const CONFIG_DOC: Array<{ name: string; default: string; description: str
 const Env = z.object({
   ENVIRONMENT: z.enum(["local", "test", "staging", "production"]).default("local"),
   DATABASE_URL: z.string().default("postgres://promo:promo@127.0.0.1:5432/promo"),
-  HOST: z.string().default("127.0.0.1"), PORT: z.coerce.number().int().positive().default(8080), PUBLIC_BASE_URL: z.string().default(""),
+  HOST: z.string().default("127.0.0.1"), PORT: z.coerce.number().int().nonnegative().default(8080), PUBLIC_BASE_URL: z.string().default(""),
   MEDIA_ROOT: z.string().default("./data/media"), STORAGE_DRIVER: z.enum(["fs", "s3"]).default("fs"),
   S3_BUCKET: z.string().default(""), S3_ENDPOINT: z.string().default(""), S3_REGION: z.string().default("us-east-1"), S3_ACCESS_KEY_ID: z.string().default(""), S3_SECRET_ACCESS_KEY: z.string().default(""),
   BOOTSTRAP_ADMIN_EMAIL: z.string().default(""), BOOTSTRAP_ADMIN_PASSWORD: z.string().default(""),

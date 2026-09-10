@@ -46,7 +46,7 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   const extractor = opts.extractor ?? createExtractor(cfg);
   const signals = new OpsSignals(db); const queue = new QueueService(db); const outbox = new OutboxService(db);
   const crmAdapter = opts.crmAdapter ?? (cfg.CRM_PROVIDER === "http-contract" ? new HttpContractAdapter(cfg.CRM_BASE_URL, cfg.CRM_TOKEN, cfg.CRM_TIMEOUT_MS) : new NoCrmAdapter());
-  const crm = new CrmService(db, crmAdapter, environment, signals);
+  const crm = new CrmService(db, crmAdapter, environment, signals); participants.crm = crm;
   const pipeline = new ReceiptPipeline(db, { media, extractor, campaigns, participants, audit, outbox, queue, crm, alerts: signals, reviewSlaHours: cfg.REVIEW_SLA_HOURS });
   const winners = new WinnerService(db, { campaigns, participants, audit, outbox, crm, claimDays: cfg.CLAIM_WINDOW_DAYS });
   const draws = new DrawService(db, { campaigns, audit });
@@ -54,7 +54,7 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   const transport: WhatsAppTransport = opts.transport ?? (cfg.WHATSAPP_PROVIDER === "cloud-api" ? new CloudApiTransport({ graphVersion: cfg.META_GRAPH_VERSION, phoneNumberId: cfg.META_PHONE_NUMBER_ID, accessToken: cfg.META_ACCESS_TOKEN, appSecret: cfg.META_APP_SECRET, verifyToken: cfg.META_VERIFY_TOKEN, defaultCountryCode: cfg.DEFAULT_COUNTRY_CODE }) : new SimulatorTransport());
   if (environment === "production" && transport.mode !== "configured") throw new Error("a simulated transport is forbidden in production");
   const reports = new ReportService(db);
-  const worker = new Worker({ db, cfg, environment, queue, outbox, crm, transport, conversation, pipeline, winners, media, campaigns, signals, log });
+  const worker = new Worker({ db, cfg, environment, queue, outbox, crm, transport, conversation, pipeline, winners, media, campaigns, signals, audit, log });
   return { cfg, environment, log, pool, db, audit, auth, campaigns, participants, media, storage, extractor, signals, queue, outbox, crm, pipeline, winners, draws, conversation, transport, reports, worker,
     async close() { worker.stop(); await extractor.close?.(); await pool.end(); } };
 }

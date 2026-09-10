@@ -22,7 +22,7 @@
     "console:build": "npm --workspace apps/console run build",
     "build": "npm run typecheck && npm run console:build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

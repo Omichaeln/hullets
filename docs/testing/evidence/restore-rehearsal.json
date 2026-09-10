@@ -1,0 +1,155 @@
+{
+  "generatedAt": "2026-09-10T22:55:44.386Z",
+  "source": "promo",
+  "restoredAs": "promo_restore_mtw4ln1y",
+  "kept": false,
+  "durationMs": 779,
+  "pass": true,
+  "checks": [
+    {
+      "name": "pg_dump completed",
+      "pass": true,
+      "detail": "1542 KiB in 202 ms"
+    },
+    {
+      "name": "pg_restore completed",
+      "pass": true,
+      "detail": "403 ms into promo_restore_mtw4ln1y"
+    },
+    {
+      "name": "migration history identical",
+      "pass": true,
+      "detail": {
+        "source": {
+          "n": 1,
+          "latest": "1789076447546"
+        },
+        "restored": {
+          "n": 1,
+          "latest": "1789076447546"
+        }
+      }
+    },
+    {
+      "name": "row counts identical for every ledger table",
+      "pass": true,
+      "detail": {
+        "staff_users": [
+          8,
+          8
+        ],
+        "campaigns": [
+          1,
+          1
+        ],
+        "campaign_versions": [
+          1,
+          1
+        ],
+        "campaign_periods": [
+          4,
+          4
+        ],
+        "outlets": [
+          80,
+          80
+        ],
+        "participants": [
+          12,
+          12
+        ],
+        "enrollments": [
+          12,
+          12
+        ],
+        "inbound_events": [
+          212,
+          212
+        ],
+        "submissions": [
+          29,
+          29
+        ],
+        "extractions": [
+          29,
+          29
+        ],
+        "canonical_receipts": [
+          20,
+          20
+        ],
+        "entries": [
+          17,
+          17
+        ],
+        "draws": [
+          1,
+          1
+        ],
+        "draw_candidates": [
+          9,
+          9
+        ],
+        "winners": [
+          8,
+          8
+        ],
+        "outbound_messages": [
+          258,
+          258
+        ],
+        "crm_events": [
+          93,
+          93
+        ],
+        "audit_events": [
+          246,
+          246
+        ]
+      }
+    },
+    {
+      "name": "audit chain head identical",
+      "pass": true,
+      "detail": {
+        "source": {
+          "id": "246",
+          "entry_hash": "692781335f8ea509848cbcb10a6ab3e8553cfcafe31cec4d712b8db13b36d9bb"
+        },
+        "restored": {
+          "id": "246",
+          "entry_hash": "692781335f8ea509848cbcb10a6ab3e8553cfcafe31cec4d712b8db13b36d9bb"
+        }
+      }
+    },
+    {
+      "name": "audit hash chain verifies on the restored copy",
+      "pass": true,
+      "detail": {
+        "total": 246,
+        "broken": 0
+      }
+    },
+    {
+      "name": "latest signed checkpoint verifies with the configured AUDIT_SIGNING_KEY",
+      "pass": true
+    },
+    {
+      "name": "every draw's stored evidence recomputes",
+      "pass": true,
+      "detail": [
+        "drw_3asuU1esNCTmgPPe:published:ok"
+      ]
+    },
+    {
+      "name": "media objects referenced by the ledger exist in storage (sample of 25)",
+      "pass": true,
+      "detail": "25/25 · storage is outside the database dump: back it up separately (runbook)"
+    },
+    {
+      "name": "restored copy dropped",
+      "pass": true,
+      "detail": "promo_restore_mtw4ln1y"
+    }
+  ]
+}

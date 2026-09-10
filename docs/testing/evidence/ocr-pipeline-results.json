@@ -1,0 +1,329 @@
+{
+  "generatedAt": "2026-09-10T22:54:04.315Z",
+  "extractor": "tesseract (offline, real OCR)",
+  "fixtures": 35,
+  "agree": 35,
+  "results": [
+    {
+      "id": "valid-two-pack-A",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1342
+    },
+    {
+      "id": "valid-two-pack-B",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1063
+    },
+    {
+      "id": "valid-two-pack-C",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1010
+    },
+    {
+      "id": "valid-two-pack-A-photo",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1302
+    },
+    {
+      "id": "valid-three-pack-A",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 858
+    },
+    {
+      "id": "valid-multi-line-B",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1082
+    },
+    {
+      "id": "one-pack-A",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "below_minimum",
+      "receiptNo": null,
+      "date": null,
+      "ms": 791
+    },
+    {
+      "id": "two-kg-text-not-qty-C",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "below_minimum",
+      "receiptNo": null,
+      "date": null,
+      "ms": 783
+    },
+    {
+      "id": "wrong-sku-A",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "no_qualifying_product",
+      "receiptNo": null,
+      "date": null,
+      "ms": 854
+    },
+    {
+      "id": "alt-pack-1kg-x4-B",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "below_minimum",
+      "receiptNo": null,
+      "date": null,
+      "ms": 831
+    },
+    {
+      "id": "void-line-A",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "no_qualifying_product",
+      "receiptNo": null,
+      "date": null,
+      "ms": 979
+    },
+    {
+      "id": "non-participating-outlet-A",
+      "expected": "review",
+      "got": "review",
+      "reason": "outlet_mismatch",
+      "receiptNo": null,
+      "date": null,
+      "ms": 721
+    },
+    {
+      "id": "date-before-window-A",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "date_outside_window",
+      "receiptNo": null,
+      "date": null,
+      "ms": 770
+    },
+    {
+      "id": "date-after-window-A",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "date_outside_window",
+      "receiptNo": null,
+      "date": null,
+      "ms": 769
+    },
+    {
+      "id": "ambiguous-date-C",
+      "expected": "review",
+      "got": "review",
+      "reason": "date_ambiguous",
+      "receiptNo": null,
+      "date": null,
+      "ms": 814
+    },
+    {
+      "id": "missing-receipt-no-B",
+      "expected": "review",
+      "got": "review",
+      "reason": "receipt_number_unreadable",
+      "receiptNo": null,
+      "date": null,
+      "ms": 871
+    },
+    {
+      "id": "cropped-top-A",
+      "expected": "review",
+      "got": "review",
+      "reason": "outlet_mismatch",
+      "receiptNo": null,
+      "date": null,
+      "ms": 691
+    },
+    {
+      "id": "blurred-A",
+      "expected": [
+        "reupload",
+        "review"
+      ],
+      "got": "reupload",
+      "reason": "not_a_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1713
+    },
+    {
+      "id": "dark-A",
+      "expected": [
+        "reupload",
+        "review"
+      ],
+      "got": "reupload",
+      "reason": "not_a_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 5209
+    },
+    {
+      "id": "random-photo",
+      "expected": "reupload",
+      "got": "reupload",
+      "reason": "not_a_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1004
+    },
+    {
+      "id": "unrelated-paper",
+      "expected": "reupload",
+      "got": "reupload",
+      "reason": "not_a_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 3012
+    },
+    {
+      "id": "dup-photo-A",
+      "expected": "duplicate",
+      "got": "duplicate",
+      "reason": "duplicate_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1180
+    },
+    {
+      "id": "dup-cropped-A",
+      "expected": "duplicate",
+      "got": "duplicate",
+      "reason": "duplicate_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 912
+    },
+    {
+      "id": "dup-recompressed-A",
+      "expected": "duplicate",
+      "got": "duplicate",
+      "reason": "duplicate_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 763
+    },
+    {
+      "id": "dup-rotated-A",
+      "expected": "duplicate",
+      "got": "duplicate",
+      "reason": "duplicate_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 3963
+    },
+    {
+      "id": "dup-no-total-B",
+      "expected": "duplicate",
+      "got": "duplicate",
+      "reason": "duplicate_receipt",
+      "receiptNo": null,
+      "date": null,
+      "ms": 1027
+    },
+    {
+      "id": "pool-02-C",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    },
+    {
+      "id": "pool-03-A",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    },
+    {
+      "id": "pool-04-B",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    },
+    {
+      "id": "pool-05-C",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    },
+    {
+      "id": "pool-06-A",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    },
+    {
+      "id": "pool-07-B",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    },
+    {
+      "id": "pool-08-C",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    },
+    {
+      "id": "pool-09-A",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    },
+    {
+      "id": "pool-10-B",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "receiptNo": null,
+      "date": null,
+      "ms": 0
+    }
+  ]
+}

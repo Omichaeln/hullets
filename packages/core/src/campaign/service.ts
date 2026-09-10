@@ -217,7 +217,7 @@ export class CampaignService {
 
 /** Small RFC-4180 parser (quoted fields, CRLF, BOM). Formula injection is neutralised on export, never on import. */
 export function parseCsv(text: string): Array<Record<string, string>> {
-  const rows: string[][] = []; let row: string[] = [], field = "", q = false; const s = String(text || "").replace(/^﻿/, "");
+  const rows: string[][] = []; let row: string[] = [], field = "", q = false; const s = String(text || "").replace(/^\uFEFF/, "");
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (q) { if (c === '"') { if (s[i + 1] === '"') { field += '"'; i++; } else q = false; } else field += c; continue; }

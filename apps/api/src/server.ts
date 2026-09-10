@@ -29,7 +29,7 @@ export function createHttpServer(app: App) {
     let payload: unknown; try { payload = JSON.parse(raw.toString("utf8")); } catch { return res.status(400).json({ error: { code: "VALIDATION", message: "malformed JSON" } }); }
     let events; try { events = app.transport.parseInbound(payload); } catch { return res.status(400).json({ error: { code: "VALIDATION", message: "unrecognised payload" } }); }
     let accepted = 0, deduped = 0;
-    try { for (const ev of events) { const r = await app.queue.receive(ev); r.accepted ? accepted++ : deduped++; } }
+    try { for (const ev of events) { const r = await app.queue.receive(ev); if (r.accepted) accepted++; else deduped++; } }
     catch (e) { app.log.error({ err: (e as Error).message }, "webhook persist failed"); return res.status(503).json({ error: { code: "INTAKE_UNAVAILABLE", message: "could not persist the event; retry" } }); }
     res.status(200).json({ received: events.length, accepted, deduped });
   });

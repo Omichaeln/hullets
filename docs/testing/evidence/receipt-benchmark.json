@@ -1,0 +1,677 @@
+{
+  "generatedAt": "2026-09-10T22:50:36.682Z",
+  "extractor": {
+    "name": "tesseract",
+    "mode": "real",
+    "model": "tesseract.js@7.0.0"
+  },
+  "gate": {
+    "dispositionAgreement": 0.9,
+    "qualifiedFieldAccuracy": 1
+  },
+  "fixtures": 34,
+  "dispositionAgreement": 1,
+  "fieldAccuracy": 1,
+  "qualifiedFieldAccuracy": 1,
+  "latencyMs": {
+    "p50": 653,
+    "p95": 2789,
+    "max": 5049
+  },
+  "pass": true,
+  "note": "Synthetic fixtures (fictional retailers and products). Agreement on client-supplied real receipts is the activation evidence (docs/testing/receipt-benchmark.md).",
+  "rows": [
+    {
+      "id": "valid-two-pack-A",
+      "notes": "Layout A, 2 x 2kg, crisp scan",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": true,
+        "date": true,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "004512",
+      "date": "2026-10-05",
+      "packs": 2,
+      "confidence": 0.95,
+      "ms": 1024
+    },
+    {
+      "id": "valid-two-pack-B",
+      "notes": "Layout B inline qty, crisp",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": true,
+        "date": true,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "88213",
+      "date": "2026-10-06",
+      "packs": 2,
+      "confidence": 0.93,
+      "ms": 653
+    },
+    {
+      "id": "valid-two-pack-C",
+      "notes": "Layout C one line per pack",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": true,
+        "date": true,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "C77120",
+      "date": "2026-10-07",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 660
+    },
+    {
+      "id": "valid-two-pack-A-photo",
+      "notes": "Layout A photographed: slight rotation, noise, scaled",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": true,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "004520",
+      "date": "2026-10-08",
+      "packs": 2,
+      "confidence": 0.85,
+      "ms": 1002
+    },
+    {
+      "id": "valid-three-pack-A",
+      "notes": "Larger purchase (3 packs) still one award",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "004533",
+      "date": "2026-10-08",
+      "packs": 3,
+      "confidence": 0.94,
+      "ms": 634
+    },
+    {
+      "id": "valid-multi-line-B",
+      "notes": "Sugar among other items",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "88240",
+      "date": "2026-10-09",
+      "packs": 2,
+      "confidence": 0.93,
+      "ms": 883
+    },
+    {
+      "id": "one-pack-A",
+      "notes": "Only one 2kg pack",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "below_minimum",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "004540",
+      "date": "2026-10-09",
+      "packs": 1,
+      "confidence": 0.93,
+      "ms": 630
+    },
+    {
+      "id": "two-kg-text-not-qty-C",
+      "notes": "'2KG' printed in the description, quantity one",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "below_minimum",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "C77131",
+      "date": "2026-10-09",
+      "packs": 1,
+      "confidence": 0.94,
+      "ms": 648
+    },
+    {
+      "id": "wrong-sku-A",
+      "notes": "White sugar, not brown",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "no_qualifying_product",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "004541",
+      "date": "2026-10-10",
+      "packs": 0,
+      "confidence": 0.94,
+      "ms": 611
+    },
+    {
+      "id": "alt-pack-1kg-x4-B",
+      "notes": "4 x 1kg = 4000g; qualifies only under allowMixedPacks",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "below_minimum",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "88251",
+      "date": "2026-10-10",
+      "packs": 0,
+      "confidence": 0.94,
+      "ms": 636
+    },
+    {
+      "id": "void-line-A",
+      "notes": "Two packs then a VOID line: nothing qualifying remains",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "no_qualifying_product",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "004550",
+      "date": "2026-10-11",
+      "packs": 0,
+      "confidence": 0.92,
+      "ms": 793
+    },
+    {
+      "id": "non-participating-outlet-A",
+      "notes": "Header names an unknown shop; selected outlet does not match",
+      "expected": "review",
+      "got": "review",
+      "reason": "outlet_mismatch",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "1188",
+      "date": "2026-10-11",
+      "packs": 2,
+      "confidence": 0.93,
+      "ms": 558
+    },
+    {
+      "id": "date-before-window-A",
+      "notes": "Dated August 2026",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "date_outside_window",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "004311",
+      "date": "2026-08-20",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 614
+    },
+    {
+      "id": "date-after-window-A",
+      "notes": "Dated January 2027",
+      "expected": "not_qualified",
+      "got": "not_qualified",
+      "reason": "date_outside_window",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "009911",
+      "date": "2027-01-05",
+      "packs": 2,
+      "confidence": 0.95,
+      "ms": 643
+    },
+    {
+      "id": "ambiguous-date-C",
+      "notes": "10/06/2026: DMY reads 10 June (outside the window), MDY reads 6 October (inside) -> review",
+      "expected": "review",
+      "got": "review",
+      "reason": "date_ambiguous",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "C77150",
+      "date": "2026-06-10",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 651
+    },
+    {
+      "id": "missing-receipt-no-B",
+      "notes": "No receipt number printed",
+      "expected": "review",
+      "got": "review",
+      "reason": "receipt_number_unreadable",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": null,
+      "date": "2026-10-12",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 589
+    },
+    {
+      "id": "cropped-top-A",
+      "notes": "Header cropped away: outlet unreadable",
+      "expected": "review",
+      "got": "review",
+      "reason": "outlet_mismatch",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "004560",
+      "date": "2026-10-12",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 518
+    },
+    {
+      "id": "blurred-A",
+      "notes": "Heavily blurred photo",
+      "expected": [
+        "reupload",
+        "review"
+      ],
+      "got": "reupload",
+      "reason": "not_a_receipt",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": null
+      },
+      "receiptNo": null,
+      "date": null,
+      "packs": 0,
+      "confidence": 0.14,
+      "ms": 1535
+    },
+    {
+      "id": "dark-A",
+      "notes": "Underexposed photo",
+      "expected": [
+        "reupload",
+        "review"
+      ],
+      "got": "reupload",
+      "reason": "not_a_receipt",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": null
+      },
+      "receiptNo": null,
+      "date": null,
+      "packs": 0,
+      "confidence": 0.24,
+      "ms": 5049
+    },
+    {
+      "id": "random-photo",
+      "notes": "Not a receipt: shapes and gradient",
+      "expected": "reupload",
+      "got": "reupload",
+      "reason": "not_a_receipt",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": null,
+      "date": null,
+      "packs": 0,
+      "confidence": 0,
+      "ms": 824
+    },
+    {
+      "id": "unrelated-paper",
+      "notes": "A letter with instruction-like text asking for approval",
+      "expected": "reupload",
+      "got": "reupload",
+      "reason": "not_a_receipt",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": null,
+      "date": null,
+      "packs": 0,
+      "confidence": 0.95,
+      "ms": 2789
+    },
+    {
+      "id": "pool-01-B",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "89201",
+      "date": "2026-10-14",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 652
+    },
+    {
+      "id": "pool-02-C",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "C78102",
+      "date": "2026-10-15",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 659
+    },
+    {
+      "id": "pool-03-A",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "005103",
+      "date": "2026-10-16",
+      "packs": 2,
+      "confidence": 0.95,
+      "ms": 614
+    },
+    {
+      "id": "pool-04-B",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "89204",
+      "date": "2026-10-17",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 678
+    },
+    {
+      "id": "pool-05-C",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "C78105",
+      "date": "2026-10-18",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 712
+    },
+    {
+      "id": "pool-06-A",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "005106",
+      "date": "2026-10-19",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 616
+    },
+    {
+      "id": "pool-07-B",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "89207",
+      "date": "2026-10-20",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 646
+    },
+    {
+      "id": "pool-08-C",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "C78108",
+      "date": "2026-10-21",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 674
+    },
+    {
+      "id": "pool-09-A",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "005109",
+      "date": "2026-10-22",
+      "packs": 2,
+      "confidence": 0.95,
+      "ms": 631
+    },
+    {
+      "id": "pool-10-B",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "89210",
+      "date": "2026-10-13",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 660
+    },
+    {
+      "id": "uat-fresh-1-A",
+      "notes": "Reserved for the client UAT script (never seeded)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "007001",
+      "date": "2026-10-20",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 618
+    },
+    {
+      "id": "uat-fresh-2-B",
+      "notes": "Reserved for the client UAT script (never seeded)",
+      "expected": "qualified",
+      "got": "qualified",
+      "reason": "ok",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": true,
+        "document": true
+      },
+      "receiptNo": "89701",
+      "date": "2026-10-21",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 703
+    },
+    {
+      "id": "uat-ambiguous-C",
+      "notes": "Reserved for the client UAT script: ambiguous date (11/06/2026) -> review",
+      "expected": "review",
+      "got": "review",
+      "reason": "date_ambiguous",
+      "agree": true,
+      "fields": {
+        "receiptNo": null,
+        "date": null,
+        "packs": null,
+        "document": true
+      },
+      "receiptNo": "C79701",
+      "date": "2026-06-11",
+      "packs": 2,
+      "confidence": 0.94,
+      "ms": 674
+    }
+  ]
+}

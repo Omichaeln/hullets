@@ -64,6 +64,7 @@ export class WinnerService {
     return this.db.transaction(async (tx) => {
       const [w] = await tx.select().from(winners).where(eq(winners.id, winnerId)).for("update"); if (!w) throw notFound("winner");
       if (input.expectedVersion != null && w.version !== input.expectedVersion) throw conflict("the winner changed since you loaded it; reload");
+      if (!(TRANSITIONS[w.status] ?? []).includes(input.status)) throw conflict(`cannot move a winner from ${w.status} to ${input.status}`);
       if (input.status === "collected") {
         const outletId = input.collectionOutletId ?? w.collectionOutletId; if (!outletId) throw invalid("a collection outlet is required");
         const o = await this.deps.campaigns.outlet(outletId); const member = (await this.deps.campaigns.campaignOutlets(w.campaignId)).find((m) => m.id === outletId);
