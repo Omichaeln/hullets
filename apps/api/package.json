@@ -1,0 +1,2 @@
+{ "name": "@promo/api", "version": "0.1.0", "private": true, "type": "module",
+  "dependencies": { "@promo/core": "0.1.0", "@promo/db": "0.1.0", "@trpc/server": "^11.0.0", "express": "^4.21.0", "pino": "^10.0.0", "zod": "^4.0.0" } }

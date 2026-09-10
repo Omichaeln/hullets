@@ -1,0 +1,4 @@
+code,retailer,branch,town,region,collection_point,active,aliases
+EXA-HRE-01,Example Retailer,Central,Harare,Harare,yes,yes,
+EXA-HRE-01,Example Retailer,North,Harare,Harare,maybe,yes,
+,Example Retailer,,Bulawayo,,no,yes,

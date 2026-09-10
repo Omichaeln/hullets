@@ -1,0 +1,506 @@
+{
+  "generatedAt": "2026-09-10T22:15:15.192Z",
+  "fictional": true,
+  "note": "All receipts, retailers and purchases are synthetic fixtures. Expected values are benchmark labels; the pipeline never reads this file.",
+  "fixtures": [
+    {
+      "id": "valid-two-pack-A",
+      "file": "valid-two-pack-A.jpg",
+      "notes": "Layout A, 2 x 2kg, crisp scan",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "receiptNo": "004512",
+        "date": "2026-10-05",
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53878
+    },
+    {
+      "id": "valid-two-pack-B",
+      "file": "valid-two-pack-B.jpg",
+      "notes": "Layout B inline qty, crisp",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "receiptNo": "88213",
+        "date": "2026-10-06",
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 58535
+    },
+    {
+      "id": "valid-two-pack-C",
+      "file": "valid-two-pack-C.jpg",
+      "notes": "Layout C one line per pack",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "receiptNo": "C77120",
+        "date": "2026-10-07",
+        "outlet": "JAC-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 48199
+    },
+    {
+      "id": "valid-two-pack-A-photo",
+      "file": "valid-two-pack-A-photo.jpg",
+      "notes": "Layout A photographed: slight rotation, noise, scaled",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "receiptNo": "004520",
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 62569
+    },
+    {
+      "id": "valid-three-pack-A",
+      "file": "valid-three-pack-A.jpg",
+      "notes": "Larger purchase (3 packs) still one award",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 3,
+        "awards": 1,
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 54073
+    },
+    {
+      "id": "valid-multi-line-B",
+      "file": "valid-multi-line-B.jpg",
+      "notes": "Sugar among other items",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 77112
+    },
+    {
+      "id": "one-pack-A",
+      "file": "one-pack-A.jpg",
+      "notes": "Only one 2kg pack",
+      "expect": {
+        "document": "receipt",
+        "disposition": "not_qualified",
+        "reason": "below_minimum",
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53854
+    },
+    {
+      "id": "two-kg-text-not-qty-C",
+      "file": "two-kg-text-not-qty-C.jpg",
+      "notes": "'2KG' printed in the description, quantity one",
+      "expect": {
+        "document": "receipt",
+        "disposition": "not_qualified",
+        "reason": "below_minimum",
+        "outlet": "JAC-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 44278
+    },
+    {
+      "id": "wrong-sku-A",
+      "file": "wrong-sku-A.jpg",
+      "notes": "White sugar, not brown",
+      "expect": {
+        "document": "receipt",
+        "disposition": "not_qualified",
+        "reason": "no_qualifying_product",
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53719
+    },
+    {
+      "id": "alt-pack-1kg-x4-B",
+      "file": "alt-pack-1kg-x4-B.jpg",
+      "notes": "4 x 1kg = 4000g; qualifies only under allowMixedPacks",
+      "expect": {
+        "document": "receipt",
+        "disposition": "not_qualified",
+        "reason": "below_minimum",
+        "withMixedPacks": "qualified",
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 57604
+    },
+    {
+      "id": "void-line-A",
+      "file": "void-line-A.jpg",
+      "notes": "Two packs then a VOID line: nothing qualifying remains",
+      "expect": {
+        "document": "receipt",
+        "disposition": "not_qualified",
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 67258
+    },
+    {
+      "id": "non-participating-outlet-A",
+      "file": "non-participating-outlet-A.jpg",
+      "notes": "Header names an unknown shop; selected outlet does not match",
+      "expect": {
+        "document": "receipt",
+        "disposition": "review",
+        "reason": "outlet_mismatch"
+      },
+      "duplicateOf": null,
+      "bytes": 48170
+    },
+    {
+      "id": "date-before-window-A",
+      "file": "date-before-window-A.jpg",
+      "notes": "Dated August 2026",
+      "expect": {
+        "document": "receipt",
+        "disposition": "not_qualified",
+        "reason": "date_outside_window",
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53925
+    },
+    {
+      "id": "date-after-window-A",
+      "file": "date-after-window-A.jpg",
+      "notes": "Dated January 2027",
+      "expect": {
+        "document": "receipt",
+        "disposition": "not_qualified",
+        "reason": "date_outside_window",
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53766
+    },
+    {
+      "id": "ambiguous-date-C",
+      "file": "ambiguous-date-C.jpg",
+      "notes": "10/06/2026: DMY reads 10 June (outside the window), MDY reads 6 October (inside) -> review",
+      "expect": {
+        "document": "receipt",
+        "disposition": "review",
+        "reason": "date_ambiguous",
+        "outlet": "JAC-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 48278
+    },
+    {
+      "id": "missing-receipt-no-B",
+      "file": "missing-receipt-no-B.jpg",
+      "notes": "No receipt number printed",
+      "expect": {
+        "document": "receipt",
+        "disposition": "review",
+        "reason": "receipt_number_unreadable",
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 50515
+    },
+    {
+      "id": "cropped-top-A",
+      "file": "cropped-top-A.jpg",
+      "notes": "Header cropped away: outlet unreadable",
+      "expect": {
+        "document": "receipt",
+        "disposition": "review",
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 44179
+    },
+    {
+      "id": "blurred-A",
+      "file": "blurred-A.jpg",
+      "notes": "Heavily blurred photo",
+      "expect": {
+        "disposition": [
+          "reupload",
+          "review"
+        ],
+        "notQualified": true,
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 17890
+    },
+    {
+      "id": "dark-A",
+      "file": "dark-A.jpg",
+      "notes": "Underexposed photo",
+      "expect": {
+        "disposition": [
+          "reupload",
+          "review"
+        ],
+        "notQualified": true,
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 42560
+    },
+    {
+      "id": "random-photo",
+      "file": "random-photo.jpg",
+      "notes": "Not a receipt: shapes and gradient",
+      "expect": {
+        "document": "non_receipt",
+        "disposition": "reupload"
+      },
+      "duplicateOf": null,
+      "bytes": 18934
+    },
+    {
+      "id": "unrelated-paper",
+      "file": "unrelated-paper.jpg",
+      "notes": "A letter with instruction-like text asking for approval",
+      "expect": {
+        "document": "non_receipt",
+        "disposition": "reupload",
+        "injection": true
+      },
+      "duplicateOf": null,
+      "bytes": 44735
+    },
+    {
+      "id": "dup-photo-A",
+      "file": "dup-photo-A.jpg",
+      "notes": "Re-photograph of valid-two-pack-A (same purchase)",
+      "expect": {
+        "disposition": "duplicate"
+      },
+      "duplicateOf": "valid-two-pack-A",
+      "bytes": 65133
+    },
+    {
+      "id": "dup-cropped-A",
+      "file": "dup-cropped-A.jpg",
+      "notes": "valid-two-pack-A cropped to the body",
+      "expect": {
+        "disposition": "duplicate"
+      },
+      "duplicateOf": "valid-two-pack-A",
+      "bytes": 61819
+    },
+    {
+      "id": "dup-recompressed-A",
+      "file": "dup-recompressed-A.jpg",
+      "notes": "valid-two-pack-A re-encoded at low quality",
+      "expect": {
+        "disposition": "duplicate"
+      },
+      "duplicateOf": "valid-two-pack-A",
+      "bytes": 24525
+    },
+    {
+      "id": "dup-rotated-A",
+      "file": "dup-rotated-A.jpg",
+      "notes": "valid-two-pack-A rotated 90 degrees",
+      "expect": {
+        "disposition": "duplicate"
+      },
+      "duplicateOf": "valid-two-pack-A",
+      "bytes": 40628
+    },
+    {
+      "id": "dup-no-total-B",
+      "file": "dup-no-total-B.jpg",
+      "notes": "valid-two-pack-B re-photographed with the total line lost (ADR-0004: total is not part of the key)",
+      "expect": {
+        "disposition": "duplicate"
+      },
+      "duplicateOf": "valid-two-pack-B",
+      "bytes": 51043
+    },
+    {
+      "id": "pool-01-B",
+      "file": "pool-01-B.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 58345
+    },
+    {
+      "id": "pool-02-C",
+      "file": "pool-02-C.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "JAC-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 48239
+    },
+    {
+      "id": "pool-03-A",
+      "file": "pool-03-A.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53759
+    },
+    {
+      "id": "pool-04-B",
+      "file": "pool-04-B.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 58395
+    },
+    {
+      "id": "pool-05-C",
+      "file": "pool-05-C.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "JAC-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 48307
+    },
+    {
+      "id": "pool-06-A",
+      "file": "pool-06-A.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53781
+    },
+    {
+      "id": "pool-07-B",
+      "file": "pool-07-B.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 58430
+    },
+    {
+      "id": "pool-08-C",
+      "file": "pool-08-C.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "JAC-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 48274
+    },
+    {
+      "id": "pool-09-A",
+      "file": "pool-09-A.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53898
+    },
+    {
+      "id": "pool-10-B",
+      "file": "pool-10-B.jpg",
+      "notes": "Draw-pool receipt (distinct purchase)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 58416
+    },
+    {
+      "id": "uat-fresh-1-A",
+      "file": "uat-fresh-1-A.jpg",
+      "notes": "Reserved for the client UAT script (never seeded)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "MOP-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 53864
+    },
+    {
+      "id": "uat-fresh-2-B",
+      "file": "uat-fresh-2-B.jpg",
+      "notes": "Reserved for the client UAT script (never seeded)",
+      "expect": {
+        "document": "receipt",
+        "disposition": "qualified",
+        "packs": 2,
+        "outlet": "BAO-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 58307
+    },
+    {
+      "id": "uat-ambiguous-C",
+      "file": "uat-ambiguous-C.jpg",
+      "notes": "Reserved for the client UAT script: ambiguous date (11/06/2026) -> review",
+      "expect": {
+        "document": "receipt",
+        "disposition": "review",
+        "reason": "date_ambiguous",
+        "outlet": "JAC-HRE-01"
+      },
+      "duplicateOf": null,
+      "bytes": 48147
+    }
+  ]
+}
