@@ -15,11 +15,8 @@ import type { Plan } from "../draw/engine.ts";
 const { winners, winnerEvents, draws, entries, participants, campaignPeriods } = schema;
 export type Winner = typeof winners.$inferSelect;
 /** Lifecycle: selected -> notified -> verified -> accepted -> collected, with explicit side paths. Publication is a separate axis. */
-export const TRANSITIONS: Record<string, string[]> = {
-  selected: ["notified", "unreachable", "ineligible", "expired", "replaced", "declined"], notified: ["verified", "unreachable", "declined", "ineligible", "expired", "disputed", "replaced"],
-  verified: ["accepted", "declined", "ineligible", "expired", "disputed", "replaced"], accepted: ["collected", "expired", "ineligible", "disputed", "replaced"], disputed: ["verified", "ineligible", "replaced"],
-  unreachable: ["notified", "expired", "replaced"], collected: [], declined: ["replaced"], ineligible: ["replaced"], expired: ["replaced"], replaced: [],
-};
+import { TRANSITIONS } from "./transitions.ts";
+export { TRANSITIONS };
 const hashToken = (t: string) => sha256(`claim:${t}`);
 
 export class WinnerService {

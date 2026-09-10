@@ -21,7 +21,7 @@
     "console:dev": "npm --workspace apps/console run dev",
     "console:build": "npm --workspace apps/console run build",
     "build": "npm run typecheck && npm run console:build",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && npm --workspace apps/console run typecheck",
     "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",

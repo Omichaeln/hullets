@@ -1,0 +1,2607 @@
+{
+  "contract": "hullets-api/1",
+  "transport": "tRPC 11 over HTTP (POST /trpc/<path> for mutations, GET for queries; batch supported)",
+  "auth": "Authorization: Bearer <session token> from auth.login / auth.verifyMfa",
+  "errors": "tRPC error envelope with data.domainCode (VALIDATION, NOT_FOUND, CONFLICT, FORBIDDEN, UNAUTHORIZED, SOD, BLOCKED, INTEGRITY, APPROVAL_REQUIRED, IDENTITY_INCOMPLETE, RATE_LIMITED); unknown input fields are stripped",
+  "rest": [
+    {
+      "path": "GET /webhooks/whatsapp",
+      "note": "Meta verify handshake"
+    },
+    {
+      "path": "POST /webhooks/whatsapp",
+      "note": "signed provider events; durable-then-ack; 503 asks the provider to retry"
+    },
+    {
+      "path": "GET /api/media/:submissionId?v=normalised",
+      "note": "bearer; submission.media permission; audited"
+    },
+    {
+      "path": "GET /api/export/:scope.csv",
+      "note": "bearer; report.export; formula-safe; watermarked"
+    },
+    {
+      "path": "GET /api/draws/:drawId/bundle.json",
+      "note": "bearer; draw.bundle; independent verifier input"
+    },
+    {
+      "path": "GET /health/live | /health/ready",
+      "note": "liveness / readiness"
+    }
+  ],
+  "procedures": [
+    {
+      "path": "audit.checkpoint",
+      "type": "mutation",
+      "access": "audit.read",
+      "input": null
+    },
+    {
+      "path": "audit.list",
+      "type": "query",
+      "access": "audit.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "targetType": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "actorId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "campaignId": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "limit",
+          "offset"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "audit.verify",
+      "type": "query",
+      "access": "audit.read",
+      "input": null
+    },
+    {
+      "path": "auth.changePassword",
+      "type": "mutation",
+      "access": "session",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "auth.directory",
+      "type": "query",
+      "access": "session",
+      "input": null
+    },
+    {
+      "path": "auth.login",
+      "type": "mutation",
+      "access": "public",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "auth.logout",
+      "type": "mutation",
+      "access": "session",
+      "input": null
+    },
+    {
+      "path": "auth.me",
+      "type": "query",
+      "access": "session",
+      "input": null
+    },
+    {
+      "path": "auth.mfaDisable",
+      "type": "mutation",
+      "access": "session",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "auth.mfaEnable",
+      "type": "mutation",
+      "access": "session",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "auth.mfaEnroll",
+      "type": "mutation",
+      "access": "session",
+      "input": null
+    },
+    {
+      "path": "auth.verifyMfa",
+      "type": "mutation",
+      "access": "public",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 8
+          }
+        },
+        "required": [
+          "userId",
+          "code"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.activateVersion",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "versionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId",
+          "versionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.activation",
+      "type": "query",
+      "access": "campaign.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.clone",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId",
+          "code"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.create",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "endsAt": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "rules": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "content": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "flags": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "prizePlan": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "startsAt",
+          "endsAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.createVersion",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "fromActive": {
+            "type": "boolean"
+          },
+          "rules": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "content": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "flags": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "prizePlan": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.decisionIds",
+      "type": "query",
+      "access": "campaign.read",
+      "input": null
+    },
+    {
+      "path": "campaigns.decisions",
+      "type": "query",
+      "access": "campaign.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.get",
+      "type": "query",
+      "access": "campaign.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.importOutlets",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "csv": {
+            "type": "string",
+            "maxLength": 2000000
+          },
+          "dryRun": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "campaignId",
+          "csv",
+          "dryRun"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.list",
+      "type": "query",
+      "access": "campaign.read",
+      "input": null
+    },
+    {
+      "path": "campaigns.outlets",
+      "type": "query",
+      "access": "campaign.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.periods",
+      "type": "query",
+      "access": "campaign.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.setControls",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "pauseIntake": {
+            "type": "boolean"
+          },
+          "pauseAutoQualify": {
+            "type": "boolean"
+          },
+          "pauseOutbound": {
+            "type": "boolean"
+          },
+          "pauseDraws": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.setOutlets",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "outletId": {
+                  "type": "string"
+                },
+                "collectionPoint": {
+                  "type": "boolean"
+                },
+                "activeFrom": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "activeTo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "outletId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "campaignId",
+          "members"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.setStatus",
+      "type": "mutation",
+      "access": "campaign.activate",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "closed",
+              "archived"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "campaignId",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.update",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "endsAt": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.updateVersion",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string"
+          },
+          "rules": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "content": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "flags": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "prizePlan": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "versionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.upsertDecision",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "decisionId": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "testValue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "approvedValue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "blocksActivation": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "campaignId",
+          "decisionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.upsertPeriod",
+      "type": "mutation",
+      "access": "campaign.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "endsAt": {
+            "type": "string"
+          },
+          "drawAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prizePlan": {
+            "anyOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId",
+          "code",
+          "startsAt",
+          "endsAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "campaigns.versions",
+      "type": "query",
+      "access": "campaign.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.approve",
+      "type": "mutation",
+      "access": "draw.approve",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "drawId": {
+            "type": "string"
+          },
+          "expectedOutputHash": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "drawId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.barrier",
+      "type": "query",
+      "access": "draw.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "periodId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId",
+          "periodId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.bundle",
+      "type": "query",
+      "access": "draw.bundle",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "drawId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "drawId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.execute",
+      "type": "mutation",
+      "access": "draw.execute",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "drawId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "drawId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.freeze",
+      "type": "mutation",
+      "access": "draw.execute",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "periodId": {
+            "type": "string"
+          },
+          "override": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "allow": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "allow",
+                  "reason"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "campaignId",
+          "periodId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.get",
+      "type": "query",
+      "access": "draw.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "drawId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "drawId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.list",
+      "type": "query",
+      "access": "draw.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaignId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.publish",
+      "type": "mutation",
+      "access": "winner.manage",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "drawId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "drawId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.reject",
+      "type": "mutation",
+      "access": "draw.approve",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "drawId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "drawId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.verify",
+      "type": "query",
+      "access": "draw.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "drawId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "drawId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "draws.voidAndRerun",
+      "type": "mutation",
+      "access": "draw.execute",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "drawId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          },
+          "approvedBy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "drawId",
+          "reason",
+          "approvedBy"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "entries.disqualify",
+      "type": "mutation",
+      "access": "entry.disqualify",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "entryId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          },
+          "approvedBy": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "entryId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "entries.get",
+      "type": "query",
+      "access": "entry.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "entryId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entryId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "entries.list",
+      "type": "query",
+      "access": "entry.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "participantId": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "limit",
+          "offset"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "entries.reinstate",
+      "type": "mutation",
+      "access": "entry.disqualify",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "entryId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          },
+          "approvedBy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entryId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "masterData.outlets",
+      "type": "query",
+      "access": "campaign.read",
+      "input": null
+    },
+    {
+      "path": "masterData.products",
+      "type": "query",
+      "access": "campaign.read",
+      "input": null
+    },
+    {
+      "path": "masterData.upsertOutlet",
+      "type": "mutation",
+      "access": "masterdata.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "retailer": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "town": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "collectionPoint": {
+            "type": "boolean"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "retailer",
+          "branch",
+          "town"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "masterData.upsertProduct",
+      "type": "mutation",
+      "access": "masterdata.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "brand": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "packGrams": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sku",
+          "name",
+          "packGrams"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.ackAlert",
+      "type": "mutation",
+      "access": "ops.alerts.ack",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.alerts",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "all": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.crmEvents",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.crmPreview",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.integrations",
+      "type": "query",
+      "access": "ops.read",
+      "input": null
+    },
+    {
+      "path": "ops.metrics",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "sinceHours": {
+            "default": 24,
+            "type": "number",
+            "minimum": 1,
+            "maximum": 720
+          }
+        },
+        "required": [
+          "sinceHours"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.outbound",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.queues",
+      "type": "query",
+      "access": "ops.read",
+      "input": null
+    },
+    {
+      "path": "ops.reconcileCrm",
+      "type": "mutation",
+      "access": "ops.retry",
+      "input": null
+    },
+    {
+      "path": "ops.recordEvidence",
+      "type": "mutation",
+      "access": "evidence.record",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "receipt_benchmark_accepted",
+              "restore_rehearsal",
+              "client_uat_signoff",
+              "load_benchmark"
+            ]
+          },
+          "detail": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.replayEvent",
+      "type": "mutation",
+      "access": "ops.retry",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.retryCrm",
+      "type": "mutation",
+      "access": "ops.retry",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.retryJob",
+      "type": "mutation",
+      "access": "ops.retry",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.retryOutbound",
+      "type": "mutation",
+      "access": "ops.retry",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.setSetting",
+      "type": "mutation",
+      "access": "settings.write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.:-]{1,80}$"
+          },
+          "value": {}
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.setting",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.:-]{1,80}$"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "participants.anonymise",
+      "type": "mutation",
+      "access": "participant.privacy",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "participantId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "participantId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "participants.changePhone",
+      "type": "mutation",
+      "access": "participant.privacy",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "participantId": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "participantId",
+          "phone",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "participants.correct",
+      "type": "mutation",
+      "access": "participant.correct",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "participantId": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "surname": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "identity": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "participantId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "participants.get",
+      "type": "query",
+      "access": "participant.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "participantId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "participantId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "participants.revealIdentity",
+      "type": "mutation",
+      "access": "participant.identity.reveal",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "participantId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "participantId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "participants.search",
+      "type": "query",
+      "access": "participant.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "campaignId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "limit",
+          "offset"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "participants.stats",
+      "type": "query",
+      "access": "participant.read",
+      "input": null
+    },
+    {
+      "path": "participants.withdraw",
+      "type": "mutation",
+      "access": "participant.privacy",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "participantId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "participantId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "public.config",
+      "type": "query",
+      "access": "public",
+      "input": null
+    },
+    {
+      "path": "public.winners",
+      "type": "query",
+      "access": "public",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "readiness.get",
+      "type": "query",
+      "access": "session",
+      "input": null
+    },
+    {
+      "path": "reports.definitions",
+      "type": "query",
+      "access": "report.read",
+      "input": null
+    },
+    {
+      "path": "reports.export",
+      "type": "query",
+      "access": "report.export",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "submissions",
+              "entries",
+              "winners",
+              "participants",
+              "outlets"
+            ]
+          },
+          "campaignId": {
+            "type": "string"
+          },
+          "format": {
+            "default": "json",
+            "type": "string",
+            "enum": [
+              "json",
+              "csv"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "format"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "reports.summary",
+      "type": "query",
+      "access": "report.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          },
+          "until": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "simulator.fixtureImage",
+      "type": "query",
+      "access": "simulator.use",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-]+\\.jpg$"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "simulator.fixtures",
+      "type": "query",
+      "access": "simulator.use",
+      "input": null
+    },
+    {
+      "path": "simulator.inbound",
+      "type": "mutation",
+      "access": "simulator.use",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 20
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "imageB64": {
+            "type": "string",
+            "maxLength": 16000000
+          },
+          "mime": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "image",
+              "unsupported"
+            ]
+          },
+          "providerMessageId": {
+            "type": "string"
+          },
+          "wait": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "phone",
+          "wait"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "simulator.transcript",
+      "type": "query",
+      "access": "simulator.use",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "staff.create",
+      "type": "mutation",
+      "access": "staff.manage",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "roles": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "roles"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "staff.list",
+      "type": "query",
+      "access": "staff.manage",
+      "input": null
+    },
+    {
+      "path": "staff.resetPassword",
+      "type": "mutation",
+      "access": "staff.manage",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "staff.update",
+      "type": "mutation",
+      "access": "staff.manage",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.assign",
+      "type": "mutation",
+      "access": "submission.review",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submissionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.correctFacts",
+      "type": "mutation",
+      "access": "submission.review",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receiptNo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totalMinor": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "submissionId",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.escalate",
+      "type": "mutation",
+      "access": "submission.review",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "submissionId",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.get",
+      "type": "query",
+      "access": "submission.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submissionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.list",
+      "type": "query",
+      "access": "submission.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "participantId": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "limit",
+          "offset"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.queue",
+      "type": "query",
+      "access": "submission.read",
+      "input": null
+    },
+    {
+      "path": "submissions.release",
+      "type": "mutation",
+      "access": "submission.review",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submissionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.reprocess",
+      "type": "mutation",
+      "access": "submission.reprocess",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "submissionId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.resendResult",
+      "type": "mutation",
+      "access": "support.handoff",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submissionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.resolveDuplicate",
+      "type": "mutation",
+      "access": "submission.review",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "candidateId": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "same_purchase",
+              "different_purchase"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "candidateId",
+          "resolution"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.review",
+      "type": "mutation",
+      "access": "submission.review",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "qualified",
+              "not_qualified",
+              "duplicate",
+              "reupload"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "submissionId",
+          "decision"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "submissions.sha",
+      "type": "query",
+      "access": "submission.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submissionId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "support.claim",
+      "type": "mutation",
+      "access": "support.handoff",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "support.conversation",
+      "type": "query",
+      "access": "support.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "support.queue",
+      "type": "query",
+      "access": "support.read",
+      "input": null
+    },
+    {
+      "path": "support.release",
+      "type": "mutation",
+      "access": "support.handoff",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "support.send",
+      "type": "mutation",
+      "access": "support.handoff",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "phone",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "winners.get",
+      "type": "query",
+      "access": "winner.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "winnerId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "winnerId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "winners.list",
+      "type": "query",
+      "access": "winner.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "drawId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "winners.notify",
+      "type": "mutation",
+      "access": "winner.manage",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "winnerId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "winnerId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "winners.publish",
+      "type": "mutation",
+      "access": "winner.publish",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "winnerId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "winnerId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "winners.reassignCollection",
+      "type": "mutation",
+      "access": "winner.manage",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "winnerId": {
+            "type": "string"
+          },
+          "collectionOutletId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "winnerId",
+          "collectionOutletId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "winners.transition",
+      "type": "mutation",
+      "access": "winner.manage",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "winnerId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "collectionOutletId": {
+            "type": "string"
+          },
+          "fulfilmentRef": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "winnerId",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "winners.unpublish",
+      "type": "mutation",
+      "access": "winner.publish",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "winnerId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "winnerId",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

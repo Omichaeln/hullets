@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 
 /** Configuration schema. `doc` feeds .env.example and the preflight; secret values are never printed. */
@@ -63,7 +65,15 @@ const Env = z.object({
 });
 export type Config = z.infer<typeof Env> & { isProduction: boolean; isLocal: boolean; outboundAllowlist: string[] };
 
+/** Reads a local .env file (KEY=value lines) into process.env without overriding values already set. Never logs values. */
+export function loadDotEnv(file = process.env.ENV_FILE ?? ".env") {
+  let text: string; try { text = fs.readFileSync(path.resolve(file), "utf8"); } catch { return 0; }
+  let n = 0;
+  for (const raw of text.split(/\r?\n/)) { const line = raw.trim(); if (!line || line.startsWith("#")) continue; const m = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/); if (!m) continue; let v = m[2].trim(); if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1); if (process.env[m[1]] === undefined) { process.env[m[1]] = v; n++; } }
+  return n;
+}
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  if (env === process.env) loadDotEnv();
   const parsed = Env.safeParse(env);
   if (!parsed.success) throw new Error(`configuration invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   const c = parsed.data;
