@@ -10,13 +10,20 @@ const t = initTRPC.context<Context>().meta<Meta>().create({
 });
 const CODE: Record<string, TRPCError["code"]> = { VALIDATION: "BAD_REQUEST", NOT_FOUND: "NOT_FOUND", CONFLICT: "CONFLICT", FORBIDDEN: "FORBIDDEN", UNAUTHORIZED: "UNAUTHORIZED", SOD: "FORBIDDEN", BLOCKED: "CONFLICT", INTEGRITY: "CONFLICT", APPROVAL_REQUIRED: "FORBIDDEN", IDENTITY_INCOMPLETE: "CONFLICT", RATE_LIMITED: "TOO_MANY_REQUESTS", UNAVAILABLE: "INTERNAL_SERVER_ERROR" };
 /** Domain errors become typed tRPC errors; anything else is an opaque internal error (never a stack or SQL). */
-const mapErrors = t.middleware(async ({ next }) => {
+const mapErrors = t.middleware(async ({ ctx, next, path }) => {
   const r = await next();
   if (r.ok) return r;
   // tRPC wraps resolver throws in a TRPCError before middleware sees them; unwrap the domain cause.
   const e = r.error; const cause = e.cause;
-  if (cause instanceof DomainError) throw new TRPCError({ code: CODE[cause.code] ?? "INTERNAL_SERVER_ERROR", message: cause.message, cause });
-  if (e.code === "INTERNAL_SERVER_ERROR") throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "internal error", cause });
+  if (cause instanceof DomainError) {
+    if (cause.code === "UNAVAILABLE") await ctx.app.observability.record({ source: "trpc", code: cause.code, message: cause.message, path, correlationId: ctx.correlationId, actorId: ctx.user?.id ?? null });
+    throw new TRPCError({ code: CODE[cause.code] ?? "INTERNAL_SERVER_ERROR", message: cause.message, cause });
+  }
+  if (e.code === "INTERNAL_SERVER_ERROR") {
+    // Recorded in the error log (redacted, fingerprinted) before the caller gets the opaque message.
+    await ctx.app.observability.record({ source: "trpc", code: typeof (cause as { code?: unknown } | undefined)?.code === "string" ? String((cause as unknown as { code: string }).code) : "INTERNAL", message: (cause as Error | undefined)?.message ?? e.message, path, correlationId: ctx.correlationId, actorId: ctx.user?.id ?? null });
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "internal error", cause });
+  }
   throw e;
 });
 export const router = t.router; export const publicProcedure = t.procedure.meta({ public: true }).use(mapErrors);

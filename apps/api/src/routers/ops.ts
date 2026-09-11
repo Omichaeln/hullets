@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router, guard, publicProcedure, sessionProcedure } from "../trpc.ts";
-import { validateActivation, notFound, ROLES, permissionMatrix, DEFINITIONS, csvCell, conflict } from "@promo/core";
+import { validateActivation, notFound, ROLES, permissionMatrix, DEFINITIONS, csvCell, conflict, ERROR_SOURCES, SAMPLE_INTERVAL_SEC } from "@promo/core";
 import { eq, and, desc } from "drizzle-orm";
 import { schema } from "@promo/db";
 const { conversations } = schema;
@@ -33,6 +33,23 @@ export const opsRouter = router({
   setSetting: guard("settings.write").input(z.object({ key: z.string().regex(/^[a-z0-9_.:-]{1,80}$/), value: z.unknown() })).mutation(async ({ ctx, input }) => { await ctx.app.campaigns.setSetting(input.key, input.value, ctx.user.id); return { ok: true }; }),
   recordEvidence: guard("evidence.record").input(z.object({ kind: z.enum(["receipt_benchmark_accepted", "restore_rehearsal", "client_uat_signoff", "load_benchmark"]), detail: z.record(z.string(), z.unknown()).optional() })).mutation(async ({ ctx, input }) => { const v = { ...(input.detail ?? {}), at: new Date().toISOString(), recordedBy: ctx.user.id }; await ctx.app.campaigns.setSetting(`evidence.${input.kind}`, v, ctx.user.id); await ctx.app.audit.record(ctx.app.db, { actorType: "staff", actorId: ctx.user.id, action: "evidence.recorded", targetType: "evidence", targetId: input.kind, payload: v }); return v; }),
   metrics: guard("ops.read").input(z.object({ sinceHours: z.number().min(1).max(720).default(24) })).query(({ ctx, input }) => ctx.app.signals.counts(new Date(Date.now() - input.sinceHours * 3_600_000).toISOString())),
+  /** Uptime, throughput and backlog history from the worker's health samples, bucketed for the range. */
+  healthHistory: guard("ops.read").input(z.object({ sinceHours: z.number().min(1).max(720).default(24) })).query(async ({ ctx, input }) => {
+    const bucketSec = input.sinceHours <= 3 ? 60 : input.sinceHours <= 24 ? 300 : input.sinceHours <= 168 ? 3600 : 6 * 3600;
+    const since = new Date(Date.now() - input.sinceHours * 3_600_000).toISOString();
+    return { ...(await ctx.app.observability.history(since, bucketSec)), since, bucketSec, intervalSec: SAMPLE_INTERVAL_SEC, errors: await ctx.app.observability.countSince(since), now: new Date().toISOString() };
+  }),
+  errorSummary: guard("ops.read").input(z.object({ sinceHours: z.number().min(1).max(720).default(24), open: z.boolean().optional() })).query(({ ctx, input }) => ctx.app.observability.summary(new Date(Date.now() - input.sinceHours * 3_600_000).toISOString(), { open: !!input.open })),
+  errors: guard("ops.read").input(z.object({ sinceHours: z.number().min(1).max(720).default(24), source: z.string().optional(), code: z.string().optional(), fingerprint: z.string().optional(), open: z.boolean().optional(), limit: z.number().int().min(1).max(500).default(100) })).query(({ ctx, input }) => ctx.app.observability.list({ since: new Date(Date.now() - input.sinceHours * 3_600_000).toISOString(), source: input.source ?? null, code: input.code ?? null, fingerprint: input.fingerprint ?? null, open: !!input.open, limit: input.limit })),
+  errorSources: guard("ops.read").query(() => ERROR_SOURCES),
+  resolveErrors: guard("ops.alerts.ack").input(z.object({ id: z.string().optional(), fingerprint: z.string().optional(), note: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
+    if (!input.id && !input.fingerprint) throw conflict("an error id or fingerprint is required");
+    const closed = await ctx.app.observability.resolve(input, ctx.user.id);
+    if (closed) await ctx.app.audit.record(ctx.app.db, { actorType: "staff", actorId: ctx.user.id, action: "error.resolve", targetType: "error", targetId: input.id ?? input.fingerprint!, reason: input.note ?? null, payload: { closed, fingerprint: input.fingerprint ?? null }, correlationId: ctx.correlationId });
+    return { closed };
+  }),
+  /** The console reports its own crashes (render errors, rejected promises) so client-side failures are visible next to server-side ones. */
+  reportClientError: sessionProcedure.input(z.object({ message: z.string().min(1).max(500), url: z.string().max(300).optional(), kind: z.string().max(40).optional() })).mutation(({ ctx, input }) => ctx.app.observability.record({ source: "console", code: input.kind?.toUpperCase().replace(/[^A-Z_]/g, "_") || "CLIENT_ERROR", message: input.message, path: input.url ?? null, correlationId: ctx.correlationId, actorId: ctx.user.id }).then((id) => ({ recorded: !!id }))),
 });
 export const staffRouter = router({
   list: guard("staff.manage").query(async ({ ctx }) => ({ users: await ctx.app.auth.list(), roles: ROLES, matrix: permissionMatrix() })),

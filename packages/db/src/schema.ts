@@ -213,4 +213,19 @@ export const alerts = pgTable("alerts", { id: text("id").primaryKey(), kind: tex
 
 export const metrics = pgTable("metrics", { id: bigserial("id", { mode: "number" }).primaryKey(), name: text("name").notNull(), value: real("value").notNull().default(1), labels: jsonb("labels").$type<Record<string, unknown> | null>(), at: ts("at").notNull().defaultNow() }, (t) => [index("ix_metrics_name").on(t.name, t.at)]);
 
+/** Operational error log: one row per failure the platform handled (API internal errors, worker failures, webhook rejections). Messages are redacted before insert; never a stack, SQL or phone number. */
+export const errorEvents = pgTable("error_events", {
+  id: text("id").primaryKey(), source: text("source").notNull(), code: text("code").notNull(), message: text("message").notNull(), fingerprint: text("fingerprint").notNull(), path: text("path"),
+  correlationId: text("correlation_id"), actorId: text("actor_id"), ref: jsonb("ref").$type<Record<string, string> | null>(), detail: jsonb("detail").$type<Record<string, unknown> | null>(),
+  occurredAt: ts("occurred_at").notNull().defaultNow(), resolvedAt: ts("resolved_at"), resolvedBy: text("resolved_by"),
+}, (t) => [index("ix_error_time").on(t.occurredAt), index("ix_error_fingerprint").on(t.fingerprint, t.occurredAt), index("ix_error_open").on(t.resolvedAt, t.occurredAt)]);
+
+/** Health samples written once a minute by the worker's housekeeping: uptime and throughput history for the console. */
+export const healthSamples = pgTable("health_samples", {
+  id: bigserial("id", { mode: "number" }).primaryKey(), at: ts("at").notNull().defaultNow(), process: text("process").notNull(), ok: boolean("ok").notNull(), uptimeSec: integer("uptime_sec").notNull(),
+  inbound: integer("inbound").notNull().default(0), processed: integer("processed").notNull().default(0), outbound: integer("outbound").notNull().default(0), errors: integer("errors").notNull().default(0),
+  waitingEvents: integer("waiting_events").notNull().default(0), waitingJobs: integer("waiting_jobs").notNull().default(0), deadLetters: integer("dead_letters").notNull().default(0), outboundFailures: integer("outbound_failures").notNull().default(0), reviewOverdue: integer("review_overdue").notNull().default(0),
+  tickLagMs: integer("tick_lag_ms").notNull().default(0), memoryMb: real("memory_mb").notNull().default(0), checks: jsonb("checks").$type<Record<string, unknown> | null>(),
+}, (t) => [index("ix_health_at").on(t.at)]);
+
 export const settings = pgTable("settings", { key: text("key").primaryKey(), value: jsonb("value").$type<unknown>().notNull(), updatedBy: text("updated_by"), updatedAt: ts("updated_at").notNull().defaultNow() });

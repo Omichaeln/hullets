@@ -13,6 +13,7 @@ A WhatsApp-native promotion engine for a retail brand: consumers register, photo
 - **Draws**: barrier checks, frozen snapshot with a committed seed, deterministic HMAC sortition, separation of duties (officer ≠ approver), integrity re-verification, void and re-run, an exportable audit bundle and an independent verifier (`npm run verify:draw`).
 - **Winners and claims**: contact with a claim reference, identity verification, acceptance with collection instructions, collection, expiry, alternates, publication as a separate revocable step, masked public listing.
 - **Operations**: durable inbound queue and jobs (lease, retry, dead letters, replay), outbox with delivery callbacks and honest unknown outcomes, CRM outbox with read-back confirmation and reconciliation, alerts with runbooks, metrics, exports that are formula-safe and watermarked.
+- **Observability**: health samples every minute (availability computed from evidence, not asserted), throughput and backlog history, and an error log of every handled failure (API, worker, webhook, console) redacted and fingerprinted, resolvable with an audited note; see `docs/runbooks/observability.md`.
 - **Console**: React 19 + tRPC 11 with the TapTap design system; role-gated navigation with server-side enforcement; every consequential action confirmed with a reason.
 
 ## Stack

@@ -4,12 +4,12 @@
 
 | Level | Where | Runs against | Purpose |
 |---|---|---|---|
-| Unit | `tests/unit` | pure functions | parser (dates, numbers, totals, lines, classification), eligibility rules, draw engine (sortition determinism, selection, verifier) |
-| Integration | `tests/integration` | a throwaway PostgreSQL database per suite, real migrations, the full app wiring, simulator transport, simulated extractor (fast) | journeys, security/RBAC/privacy, draws and winners, reliability/failure injection, review and ledger operations |
+| Unit | `tests/unit` | pure functions | parser (dates, numbers, totals, lines, classification), eligibility rules, draw engine (sortition determinism, selection, verifier), observability primitives (redaction, fingerprints, availability maths) |
+| Integration | `tests/integration` | a throwaway PostgreSQL database per suite, real migrations, the full app wiring, simulator transport, simulated extractor (fast) | journeys, security/RBAC/privacy, draws and winners, reliability/failure injection, review and ledger operations, observability (error log redaction and fingerprints, resolution audit, health samples and availability, forged-webhook logging, permissions) |
 | Real OCR | `tests/ocr` | throwaway database, tesseract | the labelled fixture set through the whole pipeline, duplicates in four variants, concurrent same-purchase race |
 | Benchmarks | `tools/bench-receipts.ts`, `tools/bench-load.ts` | tesseract / throwaway database | extraction agreement and latency; throughput and exactly-once under load |
 | Rehearsals | `tools/restore-rehearsal.ts` | the configured database | backup → isolated restore → integrity |
-| Browser | `tools/e2e-console.ts` | a started API on the seeded sample database, Chromium | every role and page, the client UAT journey, screenshots |
+| Browser | `tools/e2e-console.ts` | a started API on the seeded sample database, Chromium | every role and page, the client UAT journey, the operational visibility flow (uptime history, a browser-reported crash resolved from the error log), screenshots |
 | Smoke | `tools/smoke.ts` | a running deployment | health, contract, auth enforcement, webhook guards |
 
 `npm test` runs the first three levels (about three minutes). `npm run check` adds typecheck, lint, console build and the dependency audit.

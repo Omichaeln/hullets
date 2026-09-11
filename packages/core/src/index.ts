@@ -27,6 +27,8 @@ export { QueueService } from "./ops/queue.ts";
 export type { NormalisedEvent } from "./ops/queue.ts";
 export { OutboxService } from "./ops/outbox.ts";
 export { OpsSignals } from "./ops/alerts.ts";
+export { Observability, availability, redactMessage, fingerprintOf, sanitiseDetail, ERROR_SOURCES, SAMPLE_INTERVAL_SEC } from "./ops/observability.ts";
+export type { ErrorSource, Availability } from "./ops/observability.ts";
 export { ReportService, DEFINITIONS } from "./ops/reports.ts";
 export { validateActivation } from "./ops/activation.ts";
 export { Worker } from "./ops/worker.ts";

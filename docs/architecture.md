@@ -37,7 +37,7 @@ Everything the staff console does goes through tRPC procedures guarded by a cent
 | `winner` | materialise, notify (claim token), transitions, collection, expiry, alternates, publication, public projection | `TRANSITIONS` map; one prize per participant; publication is a separate axis |
 | `crm` | canonical mapping (`crm-map/1`), versioned outbox, delivery with read-back, reconciliation | stale versions never overwrite; unknown outcomes are reconciled, not re-sent blindly |
 | `whatsapp` | Cloud API transport (handshake, signature, normalisation, Meta-host-only media, templates) and simulator transport | unsigned webhooks are rejected before persistence |
-| `ops` | queue (events, jobs), outbox, alerts/metrics, reports, activation validator, worker | exactly-once processing through leases + unique keys |
+| `ops` | queue (events, jobs), outbox, alerts/metrics, reports, activation validator, worker, observability (health samples once a minute, redacted and fingerprinted error log) | exactly-once processing through leases + unique keys; error messages are redacted before storage and recording a failure never throws into the failure it describes |
 
 ## Data flow for a receipt
 

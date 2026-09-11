@@ -42,7 +42,7 @@ try {
   const exe = process.env.E2E_CHROMIUM ?? (fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
   browser = await chromium.launch({ ...(exe ? { executablePath: exe } : {}), args: ["--disable-features=AutofillServerCommunication,OptimizationHints,Translate", "--disable-background-networking"] });
   const login = async (page: Page, role: keyof typeof STAFF) => { await page.goto(`${BASE}/`); await page.getByLabel("Email").fill(STAFF[role]); await page.getByLabel("Password").fill(PW); await page.getByRole("button", { name: "Sign in" }).click(); await page.getByRole("button", { name: "Sign out" }).waitFor({ timeout: 15_000 }); };
-  const newPage = async (role: string, mobile = false) => { const ctx = await browser!.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1366, height: 900 }, deviceScaleFactor: 1 }); const page = await ctx.newPage(); page.setDefaultTimeout(12_000); page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) consoleErrors.push({ role, url: page.url(), text: m.text().slice(0, 300) }); }); page.on("pageerror", (e) => consoleErrors.push({ role, url: page.url(), text: `pageerror: ${e.message.slice(0, 300)}` })); return page; };
+  const newPage = async (role: string, mobile = false) => { const ctx = await browser!.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1366, height: 900 }, deviceScaleFactor: 1 }); const page = await ctx.newPage(); page.setDefaultTimeout(12_000); page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|E2E synthetic crash/.test(m.text())) consoleErrors.push({ role, url: page.url(), text: m.text().slice(0, 300) }); }); page.on("pageerror", (e) => { if (/E2E synthetic crash/.test(e.message)) return; consoleErrors.push({ role, url: page.url(), text: `pageerror: ${e.message.slice(0, 300)}` }); }); return page; };
   const settle = async (page: Page) => { await page.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => undefined); await page.waitForTimeout(250); };
   const shot = (page: Page, name: string) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage: true });
 
@@ -85,6 +85,17 @@ try {
     await page.context().close(); }
   { const page = await newPage("auditor-uat"); await login(page, "auditor");
     await step("UAT-8: the auditor verifies the audit chain and exports the draw bundle", async () => { await page.goto(`${BASE}/audit`); await settle(page); await page.getByRole("button", { name: "Verify chain" }).click(); await page.locator(".callout.success").waitFor({ timeout: 15_000 }); await shot(page, "uat-8-audit-verified"); await page.goto(drawUrl); await settle(page); const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download audit bundle" }).click()]); const p = await dl.path(); const bundle = JSON.parse(fs.readFileSync(p!, "utf8")) as { bundleVersion: string }; if (bundle.bundleVersion !== "draw-bundle/1") throw new Error("unexpected bundle"); return dl.suggestedFilename(); });
+    await page.context().close(); }
+
+  // 5. operational visibility: uptime history, error log, resolution (support has ops.read and ops.alerts.ack)
+  { const page = await newPage("support-ops"); await login(page, "support");
+    await step("OBS-1: uptime & throughput shows the availability strip and a health sample from this run", async () => { await page.goto(`${BASE}/ops?tab=history`); await settle(page); await page.locator(".avail-strip").waitFor({ timeout: 15_000 }); await page.getByRole("button", { name: "Show table" }).click(); await page.locator(".tt-table tbody tr").first().waitFor({ timeout: 15_000 }); await page.getByRole("button", { name: "Show charts" }).click(); await page.locator(".chart-svg").first().waitFor(); await shot(page, "support-ops-history"); });
+    await step("OBS-2: a console crash reported by the browser appears in the error log and can be resolved with an audited note", async () => {
+      await page.evaluate(() => { setTimeout(() => { throw new Error("E2E synthetic crash from the console"); }, 0); }); await page.waitForTimeout(800);
+      await page.goto(`${BASE}/ops?tab=errors`); await settle(page); await page.getByRole("row", { name: /E2E synthetic crash/ }).first().waitFor({ timeout: 15_000 }); await shot(page, "support-ops-errors");
+      await page.getByRole("row", { name: /E2E synthetic crash/ }).first().getByRole("button", { name: "Resolve all" }).click(); await page.getByLabel(/What was done/).fill("synthetic error raised by the browser run; nothing to fix"); await page.getByRole("dialog").getByRole("button", { name: "Resolve", exact: true }).click(); await settle(page);
+      await page.getByRole("row", { name: /E2E synthetic crash/ }).first().waitFor({ state: "detached", timeout: 15_000 });
+    });
     await page.context().close(); }
 } finally {
   await browser?.close(); server.kill("SIGTERM");

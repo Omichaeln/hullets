@@ -10,6 +10,7 @@ import type { WinnerService } from "../winner/service.ts";
 import type { MediaService } from "../media/service.ts";
 import type { CampaignService } from "../campaign/service.ts";
 import type { OpsSignals } from "./alerts.ts";
+import type { Observability } from "./observability.ts";
 import type { Config } from "../config.ts";
 import type { Logger } from "../util/log.ts";
 import { SendError } from "../whatsapp/transport.ts";
@@ -22,7 +23,7 @@ import { SendError } from "../whatsapp/transport.ts";
  */
 export class Worker {
   private timer: NodeJS.Timeout | null = null; private running = false; private ticks = 0; private lastTickAt: string | null = null;
-  constructor(private d: { db: Db; cfg: Config; environment: string; queue: QueueService; outbox: OutboxService; crm: CrmService; transport: WhatsAppTransport; conversation: ConversationEngine; pipeline: ReceiptPipeline; winners: WinnerService; media: MediaService; campaigns: CampaignService; signals: OpsSignals; audit: AuditService; log: Logger; intervalMs?: number }) {}
+  constructor(private d: { db: Db; cfg: Config; environment: string; queue: QueueService; outbox: OutboxService; crm: CrmService; transport: WhatsAppTransport; conversation: ConversationEngine; pipeline: ReceiptPipeline; winners: WinnerService; media: MediaService; campaigns: CampaignService; signals: OpsSignals; observability: Observability; checks: () => Promise<Record<string, { ok: boolean; [k: string]: unknown }>>; audit: AuditService; log: Logger; intervalMs?: number }) {}
   start() { if (!this.timer) this.timer = setInterval(() => void this.tick(), this.d.intervalMs ?? 1500); }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
   health() { return { running: !!this.timer, ticks: this.ticks, lastTickAt: this.lastTickAt }; }
@@ -36,7 +37,7 @@ export class Worker {
       for (let i = 0; i < maxCrm; i++) { const r = await this.d.crm.deliverOne(); if (!r) break; }
       if (this.ticks % 40 === 0) await this.housekeeping();
       this.lastTickAt = new Date().toISOString();
-    } catch (e) { this.d.log.error({ err: (e as Error).message }, "worker tick failed"); } finally { this.running = false; }
+    } catch (e) { this.d.log.error({ err: (e as Error).message }, "worker tick failed"); await this.d.observability.record({ source: "worker.tick", code: "TICK_FAILED", message: (e as Error).message }); } finally { this.running = false; }
   }
   /** Drain everything now (tests, simulator, seed). */
   async drain(max = 500) { let n = 0; for (let i = 0; i < max && (await this.processEvent()); i++) n++; for (let i = 0; i < max && (await this.processJob()); i++) n++; for (let i = 0; i < max && (await this.dispatchOutbound()); i++) n++; for (let i = 0; i < max; i++) { const r = await this.d.crm.deliverOne(); if (!r) break; n++; } return n; }
@@ -57,6 +58,7 @@ export class Worker {
     } catch (e) {
       const dead = await this.d.queue.failEvent(ev as InboundEvent, (e as Error).message);
       this.d.log.error({ eventId: ev.id, err: (e as Error).message }, "inbound event failed");
+      await this.d.observability.record({ source: "worker.event", code: dead ? "EVENT_DEAD_LETTER" : "EVENT_FAILED", message: (e as Error).message, path: ev.kind, correlationId: ev.correlationId, ref: { eventId: ev.id, attempt: String(ev.attempts + 1) } });
       if (dead) await this.d.signals.raise({ kind: "inbound.dead_letter", severity: "critical", message: `inbound event ${ev.id} dead-lettered: ${(e as Error).message}`, runbook: "docs/runbooks/queue-replay.md" });
       return true;
     }
@@ -74,6 +76,7 @@ export class Worker {
     } catch (e) {
       const x = e as Error & { permanent?: boolean }; const dead = await this.d.queue.failJob(job, x.message, !!x.permanent);
       this.d.log.error({ jobId: job.id, kind: job.kind, err: x.message }, "job failed");
+      await this.d.observability.record({ source: "worker.job", code: dead ? "JOB_DEAD_LETTER" : "JOB_FAILED", message: x.message, path: job.kind, ref: { jobId: job.id, submissionId: (job.payload as { submissionId?: string }).submissionId ?? null, attempt: String(job.attempts + 1) } });
       if (dead) await this.d.signals.raise({ kind: "jobs.dead_letter", severity: "critical", message: `job ${job.id} (${job.kind}) dead: ${x.message}`, runbook: "docs/runbooks/queue-replay.md" });
       return true;
     }
@@ -87,7 +90,7 @@ export class Worker {
     if (row.purpose === "winner_contact" && row.kind === "text" && this.d.transport.requiresTemplateOutsideWindow) { const last = await this.d.queue.lastInboundAt(row.channelUid); if (!last || Date.now() - Date.parse(last) > 24 * 3_600_000) { await this.d.outbox.markBlocked(row, "TEMPLATE_REQUIRED", "outside the 24-hour service window: configure an approved winner template", true); return true; } }
     const payload = row.payload as { body?: string; name?: string };
     try { const res = await this.d.transport.send(row.kind === "text" ? { kind: "text", to: row.channelUid, body: payload.body ?? "" } : row.kind === "template" ? { kind: "template", to: row.channelUid, template: payload } : { kind: "interactive", to: row.channelUid, interactive: payload }); await this.d.outbox.markSent(row.id, res.providerMessageId); await this.d.signals.metric("outbound.sent", 1, { purpose: row.purpose }); }
-    catch (e) { const x = e as SendError; const st = await this.d.outbox.markFailed(row, { message: x.message, code: x.code, permanent: x.permanent, unknownOutcome: x.unknownOutcome }); if (st !== "retryable_failure") await this.d.signals.raise({ kind: "outbound.failure", severity: "warning", message: `outbound ${row.id} ${st}: ${x.message}`, runbook: "docs/runbooks/provider-outage.md" }); }
+    catch (e) { const x = e as SendError; const st = await this.d.outbox.markFailed(row, { message: x.message, code: x.code, permanent: x.permanent, unknownOutcome: x.unknownOutcome }); if (st !== "retryable_failure") { await this.d.signals.raise({ kind: "outbound.failure", severity: "warning", message: `outbound ${row.id} ${st}: ${x.message}`, runbook: "docs/runbooks/provider-outage.md" }); await this.d.observability.record({ source: "worker.outbound", code: x.code ?? String(st).toUpperCase(), message: x.message, path: row.purpose, correlationId: row.correlationId, ref: { outboundId: row.id, campaignId: row.campaignId } }); } }
     return true;
   }
   async housekeeping() {
@@ -99,6 +102,8 @@ export class Worker {
       await this.d.queue.enqueueJob(this.d.db, "winners.expire", {}, { dedupeKey: `winners.expire:${hour}` });
       await this.d.queue.enqueueJob(this.d.db, "audit.checkpoint", {}, { dedupeKey: `audit.checkpoint:${new Date().toISOString().slice(0, 10)}` }); // a signed chain head every day
       await this.d.queue.enqueueJob(this.d.db, "media.purge", {}, { dedupeKey: `media.purge:${new Date().toISOString().slice(0, 10)}` });
-    } catch (e) { this.d.log.error({ err: (e as Error).message }, "housekeeping failed"); }
+    } catch (e) { this.d.log.error({ err: (e as Error).message }, "housekeeping failed"); await this.d.observability.record({ source: "housekeeping", code: "HOUSEKEEPING_FAILED", message: (e as Error).message }); }
+    try { await this.d.observability.sample({ queue: this.d.queue, outbox: this.d.outbox, review: this.d.pipeline, checks: this.d.checks, worker: { lastTickAt: this.lastTickAt, intervalMs: this.d.intervalMs ?? 1500 } }); }
+    catch (e) { this.d.log.error({ err: (e as Error).message }, "health sample failed"); }
   }
 }
