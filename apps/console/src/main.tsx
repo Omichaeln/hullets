@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-const apiBase = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+const apiBase = import.meta.env.VITE_API_BASE_URL || "https://promoapi-production-8258.up.railway.app";
 
 type Health = { ok?: boolean; transport?: { provider?: string; mode?: string }; worker?: { running?: boolean } };
 
