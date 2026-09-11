@@ -12,6 +12,7 @@ export function OverviewPage() {
   const queue = trpc.submissions.queue.useQuery(undefined, { enabled: can("submission.read"), refetchInterval: 30_000 });
   const alerts = trpc.ops.alerts.useQuery({}, { enabled: can("ops.read"), refetchInterval: 30_000 });
   const ack = trpc.ops.ackAlert.useMutation({ onSuccess: () => alerts.refetch() });
+  const health = trpc.ops.healthHistory.useQuery({ sinceHours: 24 }, { enabled: can("ops.read"), refetchInterval: 60_000 });
   const r = rep.data; const by = (rows?: Array<{ k: string | null; n: number }>) => (rows ?? []).map((x) => `${titleCase(x.k)} ${x.n}`).join(" · ") || "–";
   return <>
     <PageHead title="Overview" sub="Reconciled counts straight from the ledger; every figure has a definition." actions={<>
@@ -29,6 +30,12 @@ export function OverviewPage() {
         <Stat label="Not qualified by reason" value={<span style={{ fontSize: 14 }}>{by(r.not_qualified_by_reason)}</span>} />
         <Stat label="Draws" value={<span style={{ fontSize: 14 }}>{by(r.draws_by_status)}</span>} />
       </div>
+      {can("ops.read") && health.data && <div className="tt-grid c4">
+        <Stat label="Availability, 24 h" value={health.data.availability.availabilityPct == null ? "–" : `${health.data.availability.availabilityPct.toFixed(2)}%`} hint={health.data.latest ? <>{health.data.latest.ok ? "healthy" : "degraded"} · sampled {fmtDate(health.data.latest.at)} · <Link to="/ops?tab=history">history</Link></> : "no samples yet"} />
+        <Stat label="Errors, 24 h" value={health.data.errors.total} hint={<>{health.data.errors.open} unresolved · <Link to="/ops?tab=errors">error log</Link></>} />
+        <Stat label="Inbound, 24 h" value={health.data.buckets.reduce((n, b) => n + b.inbound, 0)} hint={`${health.data.buckets.reduce((n, b) => n + b.outbound, 0)} messages sent`} />
+        <Stat label="Waiting now" value={health.data.buckets.length ? health.data.buckets[health.data.buckets.length - 1].waitingEvents + health.data.buckets[health.data.buckets.length - 1].waitingJobs : 0} hint={health.data.buckets.length ? `${health.data.buckets[health.data.buckets.length - 1].deadLetters} dead letters · ${health.data.buckets[health.data.buckets.length - 1].reviewOverdue} reviews overdue` : undefined} />
+      </div>}
       <div className="tt-grid c2">
         <Card title="Entries by period"><Table rows={r.entries_by_period} keyOf={(x) => String(x.k)} cols={[{ h: "Period", c: (x) => x.k ?? "–" }, { h: "Active entries", c: (x) => x.n, num: true }]} /></Card>
         <Card title="Entries by outlet"><Table rows={r.entries_by_outlet} keyOf={(x) => String(x.k)} cols={[{ h: "Outlet", c: (x) => x.k ?? "–" }, { h: "Active entries", c: (x) => x.n, num: true }]} /></Card>

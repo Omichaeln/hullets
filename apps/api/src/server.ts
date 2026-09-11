@@ -24,13 +24,13 @@ export function createHttpServer(app: App) {
   ex.get("/webhooks/whatsapp", (req, res) => { const hs = app.transport.verifyHandshake?.(new URLSearchParams(req.query as Record<string, string>)); if (!hs) return res.status(404).end(); res.status(hs.status).type("text/plain").send(hs.body); });
   ex.post("/webhooks/whatsapp", express.raw({ type: "*/*", limit: "4mb" }), async (req, res) => {
     const raw = req.body as Buffer;
-    if (app.transport.validateSignature) { if (!app.transport.validateSignature(req.headers as Record<string, string>, raw)) { await app.signals.metric("webhook.bad_signature"); return res.status(403).json({ error: { code: "BAD_SIGNATURE", message: "invalid signature" } }); } }
+    if (app.transport.validateSignature) { if (!app.transport.validateSignature(req.headers as Record<string, string>, raw)) { await app.signals.metric("webhook.bad_signature"); await app.observability.record({ source: "webhook", code: "BAD_SIGNATURE", message: "webhook signature did not verify", path: "/webhooks/whatsapp", detail: { ip: req.ip ?? "unknown", bytes: raw.length } }); return res.status(403).json({ error: { code: "BAD_SIGNATURE", message: "invalid signature" } }); } }
     else if (app.environment === "production") return res.status(403).json({ error: { code: "FORBIDDEN", message: "simulated webhooks are disabled in production" } });
     let payload: unknown; try { payload = JSON.parse(raw.toString("utf8")); } catch { return res.status(400).json({ error: { code: "VALIDATION", message: "malformed JSON" } }); }
     let events; try { events = app.transport.parseInbound(payload); } catch { return res.status(400).json({ error: { code: "VALIDATION", message: "unrecognised payload" } }); }
     let accepted = 0, deduped = 0;
     try { for (const ev of events) { const r = await app.queue.receive(ev); if (r.accepted) accepted++; else deduped++; } }
-    catch (e) { app.log.error({ err: (e as Error).message }, "webhook persist failed"); return res.status(503).json({ error: { code: "INTAKE_UNAVAILABLE", message: "could not persist the event; retry" } }); }
+    catch (e) { app.log.error({ err: (e as Error).message }, "webhook persist failed"); await app.observability.record({ source: "webhook", code: "INTAKE_UNAVAILABLE", message: (e as Error).message, path: "/webhooks/whatsapp", detail: { events: events.length } }); return res.status(503).json({ error: { code: "INTAKE_UNAVAILABLE", message: "could not persist the event; retry" } }); }
     res.status(200).json({ received: events.length, accepted, deduped });
   });
 
@@ -62,6 +62,6 @@ export function createHttpServer(app: App) {
   // ---- console (built assets) with SPA fallback
   if (fs.existsSync(path.join(CONSOLE_DIST, "index.html"))) { ex.use(express.static(CONSOLE_DIST, { index: false, maxAge: "1h", setHeaders: (r, p) => { if (p.endsWith(".html")) r.setHeader("cache-control", "no-cache"); } })); ex.get(/^\/(?!trpc|api|webhooks|health).*/, (_req, res) => res.sendFile(path.join(CONSOLE_DIST, "index.html"))); }
   ex.use((_req, res) => res.status(404).json({ error: { code: "NOT_FOUND", message: "not found" } }));
-  ex.use((err: Error & { status?: number }, _req: Request, res: Response, _next: NextFunction) => { app.log.error({ err: err.message }, "http error"); res.status(err.status && err.status < 500 ? err.status : 500).json({ error: { code: err.status === 413 ? "PAYLOAD_TOO_LARGE" : "INTERNAL", message: err.status && err.status < 500 ? err.message : "internal error" } }); });
+  ex.use((err: Error & { status?: number }, req: Request, res: Response, _next: NextFunction) => { app.log.error({ err: err.message }, "http error"); if (!err.status || err.status >= 500 || err.status === 413) void app.observability.record({ source: "http", code: err.status === 413 ? "PAYLOAD_TOO_LARGE" : "INTERNAL", message: err.message, path: `${req.method} ${req.path}`.slice(0, 200), correlationId: correlation(req), detail: { status: err.status ?? 500 } }); res.status(err.status && err.status < 500 ? err.status : 500).json({ error: { code: err.status === 413 ? "PAYLOAD_TOO_LARGE" : "INTERNAL", message: err.status && err.status < 500 ? err.message : "internal error" } }); });
   return ex;
 }

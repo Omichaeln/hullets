@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from "react";
+import { installErrorReporting, reportClientError } from "./lib/report.ts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { trpc, makeClient, session } from "./lib/trpc.ts";
 import { AuthProvider, useMe, useCan, type Me, type Permission } from "./lib/auth.tsx";
@@ -82,7 +83,15 @@ function Routes() {
   else if (path === "/readiness") page = <ReadinessPage />;
   else if (path === "/simulator") page = <SimulatorPage />;
   else page = <div className="empty">Page not found. <Link to="/">Go to the overview</Link></div>;
-  return <Shell>{page}</Shell>;
+  return <Shell><PageBoundary key={path}>{page}</PageBoundary></Shell>;
+}
+
+/** A page that throws while rendering shows a recoverable message and is reported to the error log; the shell and navigation stay usable. */
+class PageBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { reportClientError("render_error", `${error.message} ${info.componentStack?.split("\n").find((l) => l.trim())?.trim() ?? ""}`); }
+  render() { return this.state.error ? <div className="callout danger">This page failed to render: {this.state.error.message}. The failure has been recorded in the error log. <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => this.setState({ error: null })}>Try again</button></div> : this.props.children; }
 }
 
 function Session({ children }: { children: (v: { me: Me | null; refresh: () => Promise<unknown>; signOut: () => Promise<void> }) => React.ReactNode }) {
@@ -98,5 +107,6 @@ function Session({ children }: { children: (v: { me: Me | null; refresh: () => P
 export function App() {
   const [qc] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } }));
   const [client] = useState(() => makeClient());
+  useEffect(() => { installErrorReporting(); }, []);
   return <trpc.Provider client={client} queryClient={qc}><QueryClientProvider client={qc}><ToastProvider><Session>{(v) => <AuthProvider value={v}><Routes /></AuthProvider>}</Session></ToastProvider></QueryClientProvider></trpc.Provider>;
 }

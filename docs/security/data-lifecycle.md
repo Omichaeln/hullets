@@ -12,6 +12,8 @@
 | Audit log | `audit_events`, `audit_checkpoints` | hash chain + signed checkpoints | never deleted |
 | Staff credentials | `staff_users` (scrypt), `staff_sessions` (hashed tokens), MFA secret (encrypted) | sessions expire (`SESSION_HOURS`), revoked on role change/disable | disabled users retain audit attribution |
 | CRM payloads | `crm_events` (masked canonical records) | no identity numbers or full phones | kept for reconciliation; the vendor's retention is a client decision (D-22) |
+| Error log | `error_events` | messages redacted before insert (phones, e-mail, tokens, paths); never a stack, SQL or message body; references are record ids only | purged after 90 days by housekeeping |
+| Health samples | `health_samples` | operational counters and gauges only | purged after 30 days by housekeeping |
 | Backups | `pg_dump` custom format | encrypt at rest where stored; restore rehearsed | per the client's retention policy |
 
 Participant rights: **correction** (support role, audited reason, CRM updated), **withdrawal** (stops participation, keeps ledger), **deletion** (anonymise: personal fields removed, ledger references remain), all in the console under Participants. Exports never contain identity numbers or full phone numbers.

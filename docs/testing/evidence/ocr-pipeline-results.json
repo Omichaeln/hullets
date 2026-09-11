@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T23:43:42.769Z",
+  "generatedAt": "2026-09-11T16:14:11.703Z",
   "extractor": "tesseract (offline, real OCR)",
   "fixtures": 35,
   "agree": 35,
@@ -11,7 +11,7 @@
       "reason": "ok",
       "receiptNo": null,
       "date": null,
-      "ms": 1166
+      "ms": 1922
     },
     {
       "id": "valid-two-pack-B",
@@ -20,7 +20,7 @@
       "reason": "ok",
       "receiptNo": null,
       "date": null,
-      "ms": 855
+      "ms": 1077
     },
     {
       "id": "valid-two-pack-C",
@@ -29,7 +29,7 @@
       "reason": "ok",
       "receiptNo": null,
       "date": null,
-      "ms": 811
+      "ms": 1013
     },
     {
       "id": "valid-two-pack-A-photo",
@@ -38,7 +38,7 @@
       "reason": "ok",
       "receiptNo": null,
       "date": null,
-      "ms": 1169
+      "ms": 1454
     },
     {
       "id": "valid-three-pack-A",
@@ -47,7 +47,7 @@
       "reason": "ok",
       "receiptNo": null,
       "date": null,
-      "ms": 768
+      "ms": 973
     },
     {
       "id": "valid-multi-line-B",
@@ -56,7 +56,7 @@
       "reason": "ok",
       "receiptNo": null,
       "date": null,
-      "ms": 1048
+      "ms": 1456
     },
     {
       "id": "one-pack-A",
@@ -65,7 +65,7 @@
       "reason": "below_minimum",
       "receiptNo": null,
       "date": null,
-      "ms": 780
+      "ms": 973
     },
     {
       "id": "two-kg-text-not-qty-C",
@@ -74,7 +74,7 @@
       "reason": "below_minimum",
       "receiptNo": null,
       "date": null,
-      "ms": 745
+      "ms": 963
     },
     {
       "id": "wrong-sku-A",
@@ -83,7 +83,7 @@
       "reason": "no_qualifying_product",
       "receiptNo": null,
       "date": null,
-      "ms": 759
+      "ms": 955
     },
     {
       "id": "alt-pack-1kg-x4-B",
@@ -92,7 +92,7 @@
       "reason": "below_minimum",
       "receiptNo": null,
       "date": null,
-      "ms": 773
+      "ms": 971
     },
     {
       "id": "void-line-A",
@@ -101,7 +101,7 @@
       "reason": "no_qualifying_product",
       "receiptNo": null,
       "date": null,
-      "ms": 941
+      "ms": 1500
     },
     {
       "id": "non-participating-outlet-A",
@@ -110,7 +110,7 @@
       "reason": "outlet_mismatch",
       "receiptNo": null,
       "date": null,
-      "ms": 672
+      "ms": 893
     },
     {
       "id": "date-before-window-A",
@@ -119,7 +119,7 @@
       "reason": "date_outside_window",
       "receiptNo": null,
       "date": null,
-      "ms": 759
+      "ms": 952
     },
     {
       "id": "date-after-window-A",
@@ -128,7 +128,7 @@
       "reason": "date_outside_window",
       "receiptNo": null,
       "date": null,
-      "ms": 733
+      "ms": 1095
     },
     {
       "id": "ambiguous-date-C",
@@ -137,7 +137,7 @@
       "reason": "date_ambiguous",
       "receiptNo": null,
       "date": null,
-      "ms": 758
+      "ms": 1017
     },
     {
       "id": "missing-receipt-no-B",
@@ -146,7 +146,7 @@
       "reason": "receipt_number_unreadable",
       "receiptNo": null,
       "date": null,
-      "ms": 736
+      "ms": 925
     },
     {
       "id": "cropped-top-A",
@@ -155,7 +155,7 @@
       "reason": "outlet_mismatch",
       "receiptNo": null,
       "date": null,
-      "ms": 649
+      "ms": 844
     },
     {
       "id": "blurred-A",
@@ -167,7 +167,7 @@
       "reason": "not_a_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 1676
+      "ms": 2067
     },
     {
       "id": "dark-A",
@@ -179,7 +179,7 @@
       "reason": "not_a_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 5319
+      "ms": 6559
     },
     {
       "id": "random-photo",
@@ -188,7 +188,7 @@
       "reason": "not_a_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 973
+      "ms": 1182
     },
     {
       "id": "unrelated-paper",
@@ -197,7 +197,7 @@
       "reason": "not_a_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 2917
+      "ms": 3676
     },
     {
       "id": "dup-photo-A",
@@ -206,7 +206,7 @@
       "reason": "duplicate_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 1146
+      "ms": 1454
     },
     {
       "id": "dup-cropped-A",
@@ -215,7 +215,7 @@
       "reason": "duplicate_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 898
+      "ms": 1101
     },
     {
       "id": "dup-recompressed-A",
@@ -224,7 +224,7 @@
       "reason": "duplicate_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 759
+      "ms": 920
     },
     {
       "id": "dup-rotated-A",
@@ -233,7 +233,7 @@
       "reason": "duplicate_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 3842
+      "ms": 4808
     },
     {
       "id": "dup-no-total-B",
@@ -242,7 +242,7 @@
       "reason": "duplicate_receipt",
       "receiptNo": null,
       "date": null,
-      "ms": 1033
+      "ms": 1335
     },
     {
       "id": "pool-02-C",

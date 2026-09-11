@@ -40,6 +40,7 @@ FR → implementation → automated test(s). Test identifiers refer to the build
 | FR-34 | Reuse and historical campaign separation | campaign clone; all ledger rows keyed by campaign | T-17, T-18, T-25, T-29 → e2e (clone), security |
 | FR-35 | Real-phone client acceptance testing available | Cloud API transport + OUTBOUND_ALLOWLIST; docs/testing/client-uat.md | T-01, T-04, T-23, T-35 → blocked on credentials (see TEST_READINESS) |
 | FR-36 | Delivery supports the window with explicit dependencies and honest readiness | readiness report, activation validator, docs/TEST_READINESS.md | T-34, T-35, T-36 → security T-36, restore rehearsal, e2e |
+| FR-37 | Operational visibility for administrators: uptime, throughput, backlog and every handled failure, with redaction and resolution | `ops/observability.ts` (health samples, error log), `ops.healthHistory`/`ops.errors`/`ops.resolveErrors`, console Uptime & throughput and Error log tabs, `docs/runbooks/observability.md` | T-37 → unit observability, integration observability, e2e |
 
 ## T-xx coverage
 

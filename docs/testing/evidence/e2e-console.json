@@ -1,774 +1,784 @@
 {
-  "generatedAt": "2026-09-10T23:40:28.444Z",
+  "generatedAt": "2026-09-11T16:17:58.941Z",
   "base": "http://127.0.0.1:18080",
   "pass": true,
   "steps": [
     {
       "name": "manager: sign in",
       "pass": true,
-      "ms": 381
+      "ms": 1290
     },
     {
       "name": "manager: overview",
       "pass": true,
-      "ms": 973
+      "ms": 1256
     },
     {
       "name": "manager: submissions",
       "pass": true,
-      "ms": 996
+      "ms": 1325
     },
     {
       "name": "manager: submissions-queue",
       "pass": true,
-      "ms": 904
+      "ms": 1056
     },
     {
       "name": "manager: entries",
       "pass": true,
-      "ms": 949
+      "ms": 1039
     },
     {
       "name": "manager: participants",
       "pass": true,
-      "ms": 942
+      "ms": 1022
     },
     {
       "name": "manager: support",
       "pass": true,
-      "ms": 906
+      "ms": 1006
     },
     {
       "name": "manager: draws",
       "pass": true,
-      "ms": 956
+      "ms": 1049
     },
     {
       "name": "manager: winners",
       "pass": true,
-      "ms": 918
+      "ms": 1007
     },
     {
       "name": "manager: campaigns",
       "pass": true,
-      "ms": 909
+      "ms": 1029
     },
     {
       "name": "manager: master-data",
       "pass": true,
-      "ms": 1178
+      "ms": 1736
     },
     {
       "name": "manager: simulator",
       "pass": true,
-      "ms": 909
+      "ms": 1002
     },
     {
       "name": "manager: ops",
       "pass": true,
-      "ms": 1257
+      "ms": 1417
     },
     {
       "name": "manager: audit hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 828
+      "ms": 859
     },
     {
       "name": "manager: staff hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 1608
+      "ms": 1633
     },
     {
       "name": "manager: readiness",
       "pass": true,
-      "ms": 1142
+      "ms": 1644
     },
     {
       "name": "manager: account",
       "pass": true,
-      "ms": 914
+      "ms": 970
     },
     {
       "name": "reviewer: sign in",
       "pass": true,
-      "ms": 354
+      "ms": 415
     },
     {
       "name": "reviewer: overview",
       "pass": true,
-      "ms": 946
+      "ms": 1031
     },
     {
       "name": "reviewer: submissions",
       "pass": true,
-      "ms": 980
+      "ms": 1068
     },
     {
       "name": "reviewer: submissions-queue",
       "pass": true,
-      "ms": 905
+      "ms": 963
     },
     {
       "name": "reviewer: entries",
       "pass": true,
-      "ms": 949
+      "ms": 1020
     },
     {
       "name": "reviewer: participants",
       "pass": true,
-      "ms": 950
+      "ms": 990
     },
     {
       "name": "reviewer: support hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 829
+      "ms": 860
     },
     {
       "name": "reviewer: draws hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 846
+      "ms": 890
     },
     {
       "name": "reviewer: winners hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 829
+      "ms": 848
     },
     {
       "name": "reviewer: campaigns",
       "pass": true,
-      "ms": 910
+      "ms": 963
     },
     {
       "name": "reviewer: master-data",
       "pass": true,
-      "ms": 1175
+      "ms": 1399
     },
     {
       "name": "reviewer: simulator",
       "pass": true,
-      "ms": 930
+      "ms": 980
     },
     {
       "name": "reviewer: ops hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 828
+      "ms": 849
     },
     {
       "name": "reviewer: audit hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 827
+      "ms": 867
     },
     {
       "name": "reviewer: staff hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 1607
+      "ms": 1617
     },
     {
       "name": "reviewer: readiness",
       "pass": true,
-      "ms": 1137
+      "ms": 1325
     },
     {
       "name": "reviewer: account",
       "pass": true,
-      "ms": 895
+      "ms": 1000
     },
     {
       "name": "support: sign in",
       "pass": true,
-      "ms": 372
+      "ms": 421
     },
     {
       "name": "support: overview",
       "pass": true,
-      "ms": 863
+      "ms": 916
     },
     {
       "name": "support: submissions",
       "pass": true,
-      "ms": 857
+      "ms": 897
     },
     {
       "name": "support: submissions-queue",
       "pass": true,
-      "ms": 848
+      "ms": 885
     },
     {
       "name": "support: entries",
       "pass": true,
-      "ms": 851
+      "ms": 900
     },
     {
       "name": "support: participants",
       "pass": true,
-      "ms": 854
+      "ms": 885
     },
     {
       "name": "support: support",
       "pass": true,
-      "ms": 847
+      "ms": 883
     },
     {
       "name": "support: draws hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 847
+      "ms": 879
     },
     {
       "name": "support: winners",
       "pass": true,
-      "ms": 862
+      "ms": 893
     },
     {
       "name": "support: campaigns",
       "pass": true,
-      "ms": 854
+      "ms": 890
     },
     {
       "name": "support: master-data",
       "pass": true,
-      "ms": 855
+      "ms": 890
     },
     {
       "name": "support: simulator",
       "pass": true,
-      "ms": 850
+      "ms": 899
     },
     {
       "name": "support: ops",
       "pass": true,
-      "ms": 860
+      "ms": 890
     },
     {
       "name": "support: audit hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 825
+      "ms": 846
     },
     {
       "name": "support: staff hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 1601
+      "ms": 1626
     },
     {
       "name": "support: readiness",
       "pass": true,
-      "ms": 871
+      "ms": 898
     },
     {
       "name": "support: account",
       "pass": true,
-      "ms": 856
+      "ms": 879
     },
     {
       "name": "draw: sign in",
       "pass": true,
-      "ms": 352
+      "ms": 423
     },
     {
       "name": "draw: overview",
       "pass": true,
-      "ms": 860
+      "ms": 883
     },
     {
       "name": "draw: submissions",
       "pass": true,
-      "ms": 867
+      "ms": 886
     },
     {
       "name": "draw: submissions-queue",
       "pass": true,
-      "ms": 860
+      "ms": 882
     },
     {
       "name": "draw: entries",
       "pass": true,
-      "ms": 872
+      "ms": 884
     },
     {
       "name": "draw: participants hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 831
+      "ms": 845
     },
     {
       "name": "draw: support hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 824
+      "ms": 854
     },
     {
       "name": "draw: draws",
       "pass": true,
-      "ms": 884
+      "ms": 937
     },
     {
       "name": "draw: winners hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 827
+      "ms": 853
     },
     {
       "name": "draw: campaigns",
       "pass": true,
-      "ms": 851
+      "ms": 927
     },
     {
       "name": "draw: master-data",
       "pass": true,
-      "ms": 859
+      "ms": 896
     },
     {
       "name": "draw: simulator hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 837
+      "ms": 858
     },
     {
       "name": "draw: ops hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 824
+      "ms": 846
     },
     {
       "name": "draw: audit hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 824
+      "ms": 843
     },
     {
       "name": "draw: staff hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 1600
+      "ms": 1619
     },
     {
       "name": "draw: readiness",
       "pass": true,
-      "ms": 870
+      "ms": 897
     },
     {
       "name": "draw: account",
       "pass": true,
-      "ms": 847
+      "ms": 883
     },
     {
       "name": "approver: sign in",
       "pass": true,
-      "ms": 372
+      "ms": 427
     },
     {
       "name": "approver: overview",
       "pass": true,
-      "ms": 870
+      "ms": 899
     },
     {
       "name": "approver: submissions",
       "pass": true,
-      "ms": 849
+      "ms": 876
     },
     {
       "name": "approver: submissions-queue",
       "pass": true,
-      "ms": 859
+      "ms": 877
     },
     {
       "name": "approver: entries",
       "pass": true,
-      "ms": 852
+      "ms": 888
     },
     {
       "name": "approver: participants",
       "pass": true,
-      "ms": 847
+      "ms": 890
     },
     {
       "name": "approver: support hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 831
+      "ms": 855
     },
     {
       "name": "approver: draws",
       "pass": true,
-      "ms": 892
+      "ms": 920
     },
     {
       "name": "approver: winners",
       "pass": true,
-      "ms": 865
+      "ms": 885
     },
     {
       "name": "approver: campaigns",
       "pass": true,
-      "ms": 853
+      "ms": 869
     },
     {
       "name": "approver: master-data",
       "pass": true,
-      "ms": 857
+      "ms": 884
     },
     {
       "name": "approver: simulator hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 839
+      "ms": 860
     },
     {
       "name": "approver: ops",
       "pass": true,
-      "ms": 862
+      "ms": 888
     },
     {
       "name": "approver: audit",
       "pass": true,
-      "ms": 867
+      "ms": 899
     },
     {
       "name": "approver: staff hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 1601
+      "ms": 1636
     },
     {
       "name": "approver: readiness",
       "pass": true,
-      "ms": 865
+      "ms": 896
     },
     {
       "name": "approver: account",
       "pass": true,
-      "ms": 853
+      "ms": 885
     },
     {
       "name": "fulfilment: sign in",
       "pass": true,
-      "ms": 362
+      "ms": 400
     },
     {
       "name": "fulfilment: overview",
       "pass": true,
-      "ms": 918
+      "ms": 997
     },
     {
       "name": "fulfilment: submissions hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 832
+      "ms": 851
     },
     {
       "name": "fulfilment: submissions-queue hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 820
+      "ms": 854
     },
     {
       "name": "fulfilment: entries",
       "pass": true,
-      "ms": 945
+      "ms": 1007
     },
     {
       "name": "fulfilment: participants",
       "pass": true,
-      "ms": 937
+      "ms": 1028
     },
     {
       "name": "fulfilment: support hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 823
+      "ms": 858
     },
     {
       "name": "fulfilment: draws",
       "pass": true,
-      "ms": 935
+      "ms": 994
     },
     {
       "name": "fulfilment: winners",
       "pass": true,
-      "ms": 918
+      "ms": 1001
     },
     {
       "name": "fulfilment: campaigns",
       "pass": true,
-      "ms": 912
+      "ms": 946
     },
     {
       "name": "fulfilment: master-data",
       "pass": true,
-      "ms": 1188
+      "ms": 1384
     },
     {
       "name": "fulfilment: simulator hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 840
+      "ms": 850
     },
     {
       "name": "fulfilment: ops hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 826
+      "ms": 841
     },
     {
       "name": "fulfilment: audit hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 825
+      "ms": 840
     },
     {
       "name": "fulfilment: staff hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 1603
+      "ms": 1619
     },
     {
       "name": "fulfilment: readiness",
       "pass": true,
-      "ms": 1138
+      "ms": 1283
     },
     {
       "name": "fulfilment: account",
       "pass": true,
-      "ms": 902
+      "ms": 959
     },
     {
       "name": "auditor: sign in",
       "pass": true,
-      "ms": 366
+      "ms": 389
     },
     {
       "name": "auditor: overview",
       "pass": true,
-      "ms": 865
+      "ms": 917
     },
     {
       "name": "auditor: submissions",
       "pass": true,
-      "ms": 861
+      "ms": 883
     },
     {
       "name": "auditor: submissions-queue",
       "pass": true,
-      "ms": 853
+      "ms": 887
     },
     {
       "name": "auditor: entries",
       "pass": true,
-      "ms": 852
+      "ms": 881
     },
     {
       "name": "auditor: participants",
       "pass": true,
-      "ms": 848
+      "ms": 882
     },
     {
       "name": "auditor: support hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 824
+      "ms": 843
     },
     {
       "name": "auditor: draws",
       "pass": true,
-      "ms": 884
+      "ms": 925
     },
     {
       "name": "auditor: winners",
       "pass": true,
-      "ms": 851
+      "ms": 906
     },
     {
       "name": "auditor: campaigns",
       "pass": true,
-      "ms": 849
+      "ms": 890
     },
     {
       "name": "auditor: master-data",
       "pass": true,
-      "ms": 860
+      "ms": 893
     },
     {
       "name": "auditor: simulator hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 828
+      "ms": 850
     },
     {
       "name": "auditor: ops",
       "pass": true,
-      "ms": 855
+      "ms": 876
     },
     {
       "name": "auditor: audit",
       "pass": true,
-      "ms": 865
+      "ms": 896
     },
     {
       "name": "auditor: staff hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 1595
+      "ms": 1625
     },
     {
       "name": "auditor: readiness",
       "pass": true,
-      "ms": 868
+      "ms": 907
     },
     {
       "name": "auditor: account",
       "pass": true,
-      "ms": 856
+      "ms": 880
     },
     {
       "name": "admin: sign in",
       "pass": true,
-      "ms": 336
+      "ms": 393
     },
     {
       "name": "admin: overview hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 819
+      "ms": 851
     },
     {
       "name": "admin: submissions hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 829
+      "ms": 843
     },
     {
       "name": "admin: submissions-queue hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 847
+      "ms": 863
     },
     {
       "name": "admin: entries hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 823
+      "ms": 853
     },
     {
       "name": "admin: participants hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 822
+      "ms": 843
     },
     {
       "name": "admin: support hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 831
+      "ms": 848
     },
     {
       "name": "admin: draws hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 847
+      "ms": 875
     },
     {
       "name": "admin: winners hidden from navigation",
       "pass": true,
       "detail": "server refuses the data",
-      "ms": 830
+      "ms": 844
     },
     {
       "name": "admin: campaigns",
       "pass": true,
-      "ms": 907
+      "ms": 979
     },
     {
       "name": "admin: master-data",
       "pass": true,
-      "ms": 1177
+      "ms": 1398
     },
     {
       "name": "admin: simulator",
       "pass": true,
-      "ms": 909
+      "ms": 985
     },
     {
       "name": "admin: ops",
       "pass": true,
-      "ms": 930
+      "ms": 1001
     },
     {
       "name": "admin: audit",
       "pass": true,
-      "ms": 1174
+      "ms": 1457
     },
     {
       "name": "admin: staff",
       "pass": true,
-      "ms": 939
+      "ms": 988
     },
     {
       "name": "admin: readiness",
       "pass": true,
-      "ms": 1092
+      "ms": 1276
     },
     {
       "name": "admin: account",
       "pass": true,
-      "ms": 899
+      "ms": 936
     },
     {
       "name": "mobile: sign in and open the menu",
       "pass": true,
-      "ms": 2682
+      "ms": 2959
     },
     {
       "name": "UAT-1: participant registers through the simulator",
       "pass": true,
-      "ms": 7399
+      "ms": 7519
     },
     {
       "name": "UAT-2: participant chooses an outlet and sends a fresh receipt (real OCR)",
       "pass": true,
-      "detail": "R-VCCN-KLHK",
-      "ms": 4618
+      "detail": "R-X285-5657",
+      "ms": 4688
     },
     {
       "name": "UAT-3: reviewer sees the new submission as qualified with its receipt image",
       "pass": true,
-      "ms": 1340
+      "ms": 1435
     },
     {
       "name": "UAT-4: reviewer takes a queued review and decides it",
       "pass": true,
-      "ms": 1719
+      "ms": 1807
     },
     {
       "name": "UAT-5: draw officer freezes and executes the open week",
       "pass": true,
-      "detail": "http://127.0.0.1:18080/draws/drw_RkVx5BjRrtT3O0cN",
-      "ms": 1975
+      "detail": "http://127.0.0.1:18080/draws/drw_VQmOYxm4n85F0yQ6",
+      "ms": 2086
     },
     {
       "name": "UAT-6: a different person approves after the integrity check",
       "pass": true,
-      "ms": 1284
+      "ms": 1356
     },
     {
       "name": "UAT-7: fulfilment publishes the draw, downloads nothing it may not, and contacts a winner",
       "pass": true,
-      "ms": 1774
+      "ms": 1895
     },
     {
       "name": "UAT-8: the auditor verifies the audit chain and exports the draw bundle",
       "pass": true,
       "detail": "draw-W-1-1.json",
-      "ms": 2252
+      "ms": 2503
+    },
+    {
+      "name": "OBS-1: uptime & throughput shows the availability strip and a health sample from this run",
+      "pass": true,
+      "ms": 1162
+    },
+    {
+      "name": "OBS-2: a console crash reported by the browser appears in the error log and can be resolved with an audited note",
+      "pass": true,
+      "ms": 2121
     }
   ],
   "consoleErrors": [],
@@ -817,6 +827,8 @@
     "reviewer-simulator-desktop.png",
     "reviewer-submissions-desktop.png",
     "reviewer-submissions-queue-desktop.png",
+    "support-ops-errors.png",
+    "support-ops-history.png",
     "uat-1-registration.png",
     "uat-2-receipt-qualified.png",
     "uat-3-review-workspace.png",

@@ -1359,6 +1359,97 @@
       }
     },
     {
+      "path": "ops.errors",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "sinceHours": {
+            "default": 24,
+            "type": "number",
+            "minimum": 1,
+            "maximum": 720
+          },
+          "source": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "open": {
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "sinceHours",
+          "limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.errorSources",
+      "type": "query",
+      "access": "ops.read",
+      "input": null
+    },
+    {
+      "path": "ops.errorSummary",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "sinceHours": {
+            "default": 24,
+            "type": "number",
+            "minimum": 1,
+            "maximum": 720
+          },
+          "open": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sinceHours"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.healthHistory",
+      "type": "query",
+      "access": "ops.read",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "sinceHours": {
+            "default": 24,
+            "type": "number",
+            "minimum": 1,
+            "maximum": 720
+          }
+        },
+        "required": [
+          "sinceHours"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "path": "ops.integrations",
       "type": "query",
       "access": "ops.read",
@@ -1458,6 +1549,56 @@
         "required": [
           "id"
         ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.reportClientError",
+      "type": "mutation",
+      "access": "session",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "path": "ops.resolveErrors",
+      "type": "mutation",
+      "access": "ops.alerts.ack",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
         "additionalProperties": false
       }
     },
