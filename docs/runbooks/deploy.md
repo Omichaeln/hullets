@@ -8,12 +8,16 @@
 5. Point the Meta webhook at `https://<host>/webhooks/whatsapp` with `META_VERIFY_TOKEN`; run `npm run smoke` with `SMOKE_BASE_URL`.
 6. Sign in as the bootstrap admin, change the password, enable MFA, create the client's staff users (Access), hand over temporary passwords out of band.
 
-## Railway (or any Docker-based PaaS)
+## Railway
 
-The repository carries a `Dockerfile` and `railway.json`, so Railway builds the image instead of guessing with Nixpacks. Why that matters: the lockfile was generated under `legacy-peer-deps` (a peer-range conflict between Vite 8 at the root and the console's Vite 7 toolchain), and a plain `npm ci` rejects it; the committed `.npmrc` makes every install consistent, and the Dockerfile pins Node 22.
+`railway.json` selects the Nixpacks builder with `npm run console:build && npm run typecheck` as the build command and `npm run -s db:migrate && npm run start` as the start command, so the console bundle is produced at build time and the migrations run (idempotently) before every start. The committed `.npmrc` (`legacy-peer-deps`, because Vite 8 at the root and the console's Vite 7 toolchain disagree on a peer range) and `.node-version` (22) make Railway's install match a local `npm ci`; a plain `npm ci` without them rejects the lockfile. Nixpacks needs no system packages: OCR uses `tesseract.js` (WASM), and image handling uses `sharp`'s prebuilt binaries.
+
+Deploy one service from the repository root. Railway's monorepo detection offers a service per workspace (`@promo/api`, `@promo/console`); only the root service is needed because the API serves the built console, so delete any extra workspace service rather than configuring it.
+
+The `Dockerfile` remains for hosts that build images (or for Railway with `"builder": "DOCKERFILE"`); it produces the same runtime, with `HOST=0.0.0.0` baked in.
 
 1. Create a PostgreSQL service in the Railway project and reference its connection string as `DATABASE_URL` on the app service (`${{Postgres.DATABASE_URL}}`).
-2. Set the variables from `.env.example`. Minimum for a first boot: `ENVIRONMENT=staging` (or `production`), `DATA_KEY`, `AUDIT_SIGNING_KEY`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `MEDIA_ROOT=/app/data/media`. `HOST=0.0.0.0` and `PORT` come from the image and Railway respectively. Leave `WHATSAPP_PROVIDER=simulator` and `EXTRACTOR=tesseract` until the Meta and extractor credentials exist; the simulator is refused only when `ENVIRONMENT=production`.
+2. Set the variables from `.env.example`. Minimum for a first boot: `ENVIRONMENT=staging` (or `production`), `DATA_KEY`, `AUDIT_SIGNING_KEY`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `MEDIA_ROOT=/app/data/media`. Set `HOST=0.0.0.0` explicitly (the default bind is loopback, which fails Railway's health check); `PORT` is injected by Railway. Leave `WHATSAPP_PROVIDER=simulator` and `EXTRACTOR=tesseract` until the Meta and extractor credentials exist; the simulator is refused only when `ENVIRONMENT=production`.
 3. Attach a volume at `/app/data` so receipt images survive redeploys (or set `STORAGE_DRIVER` to an object store when one is configured).
 4. Deploy. The start command runs the migrations (idempotent) and then the API with the embedded worker; the health check is `/health/live`.
 5. Point the Meta webhook at `https://<railway-domain>/webhooks/whatsapp` when the transport is configured; run `SMOKE_BASE_URL=https://<railway-domain> npm run smoke` from a checkout.
