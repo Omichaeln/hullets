@@ -21,7 +21,7 @@ export const cleanLine = (l: string) => String(l || "").trim().replace(/(\d)[:_Â
 
 export function classify(text: string, quality: Record<string, unknown> = {}) {
   const t = text.toLowerCase(); const words = t.split(/\s+/).filter(Boolean);
-  const kw = KEYWORDS.filter((k) => t.includes(k)).length; const prices = (t.match(/\d+[.,]\d{2}\b/g) || []).length; const dateLike = /\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\s+[a-z]{3,4}\.?\s+\d{2,4}\b/.test(t);
+  const kw = KEYWORDS.filter((k) => t.includes(k)).length; const prices = (t.match(/\d+[.,]\d{2}\b/g) || []).length; const dateLike = /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\s+[a-z]{3,4}\.?\s+\d{2,4}\b/.test(t);
   const injectionHits = INJECTION.filter((k) => t.includes(k)).length;
   let score = Math.min(kw, 5) * 0.1 + Math.min(prices, 4) * 0.1 + (dateLike ? 0.1 : 0);
   if (words.length < 6) score = Math.min(score, 0.15); score = Math.min(1, Number(score.toFixed(2)));
@@ -30,7 +30,7 @@ export function classify(text: string, quality: Record<string, unknown> = {}) {
 }
 export function parseDate(text: string, dateOrder: "DMY" | "MDY") {
   let m = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/); if (m) return valid(+m[1], +m[2], +m[3], m[0], false);
-  m = text.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4}|\d{2})\b/);
+  m = text.match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})\b/);
   if (m) { const a = +m[1], b = +m[2]; let y = +m[3]; if (y < 100) y += 2000; let d: number, mo: number, amb = false; if (a > 12 && b <= 12) { d = a; mo = b; } else if (b > 12 && a <= 12) { d = b; mo = a; } else { amb = a !== b && a <= 12 && b <= 12; if (dateOrder === "MDY") { mo = a; d = b; } else { d = a; mo = b; } } return valid(y, mo, d, m[0], amb); }
   m = text.match(/\b(\d{1,2})\s+([A-Za-z]{3,4})\.?,?\s+(\d{4}|\d{2})\b/); if (m && MONTHS[m[2].toLowerCase()]) { let y = +m[3]; if (y < 100) y += 2000; return valid(y, MONTHS[m[2].toLowerCase()], +m[1], m[0], false); }
   m = text.match(/\b([A-Za-z]{3,4})\.?\s+(\d{1,2}),?\s+(\d{4})\b/); if (m && MONTHS[m[1].toLowerCase()]) return valid(+m[3], MONTHS[m[1].toLowerCase()], +m[2], m[0], false);
@@ -39,7 +39,7 @@ export function parseDate(text: string, dateOrder: "DMY" | "MDY") {
 function valid(y: number, mo: number, d: number, raw: string, ambiguous: boolean) { if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 2000 || y > 2100) return null; const dt = new Date(Date.UTC(y, mo - 1, d)); if (dt.getUTCMonth() !== mo - 1) return null; return { date: `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`, raw, ambiguous }; }
 export function parseTime(text: string) { const m = text.match(/\b([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?\b/); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null; }
 export function parseReceiptNo(text: string) {
-  for (const re of [/(?:receipt|rcpt|rec|invoice|inv|slip|docket|doc(?:ument)?|trans(?:action)?|txn|ref(?:erence)?)\s*(?:no|nr|num|number|#)?\s*[:#.]?\s*([A-Z0-9][A-Z0-9\-\/]{2,})/i, /\b(?:no|nr|num)\s*[:#.]\s*([A-Z0-9][A-Z0-9\-\/]{3,})/i, /#\s*(\d{4,})/]) {
+  for (const re of [/(?:receipt|rcpt|rec|invoice|inv|slip|docket|doc(?:ument)?|trans(?:action)?|txn|ref(?:erence)?)\s*(?:no|nr|num|number|#)?\s*[:#.]?\s*([A-Z0-9][A-Z0-9/-]{2,})/i, /\b(?:no|nr|num)\s*[:#.]\s*([A-Z0-9][A-Z0-9/-]{3,})/i, /#\s*(\d{4,})/]) {
     const m = text.match(re); if (!m) continue; const v = m[1].toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (!/\d/.test(v) || /^(TILL|DATE|TIME|POS|NO|NR)$/.test(v) || v.length < 3) continue; return { receiptNo: v, raw: m[0] };
   }

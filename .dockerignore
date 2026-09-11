@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+apps/console/dist
+data
+tmp
+.env
+.env.*
+!.env.example
+docs/testing/evidence/screenshots
+.git

@@ -1,0 +1,5 @@
+# Backup and restore
+
+- Database: `pg_dump --format=custom` at least daily plus point-in-time recovery from the managed provider. Media storage is outside the database: snapshot the volume or rely on bucket versioning. Keep `DATA_KEY` and `AUDIT_SIGNING_KEY` in the secret store with the backups; without them identity numbers and checkpoint signatures cannot be verified.
+- Rehearsal: `npm run restore:rehearsal` dumps the configured database, restores it into an isolated database, checks migration history, row counts per ledger table, the audit chain head and full chain, the latest signed checkpoint, every draw's evidence, and a sample of media objects; then drops the copy (`--keep` retains it). Record the evidence (`evidence.restore_rehearsal`).
+- Real restore: stop API and worker; restore into a new database; point `DATABASE_URL` at it; run `npm run db:migrate` (no-op if the dump is current); start the worker only after confirming the outbox has no `pending` rows you do not want re-sent; `npm run smoke`; verify the audit chain from the console.

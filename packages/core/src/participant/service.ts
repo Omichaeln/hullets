@@ -19,7 +19,10 @@ export const maskIdentity = (v: string) => { const s = normIdentity(v); return s
  */
 export class ParticipantService {
   private cipher: FieldCipher;
+  /** CRM sink for participant changes (set after construction to avoid a wiring cycle). Only masked fields ever leave. */
+  crm: { emit(e: { entityType: string; entityId: string; entityVersion: number; payload: Record<string, unknown> }): Promise<unknown> } | null = null;
   constructor(private db: Db, private audit: AuditService, dataKey: string, private defaultCountryCode: string) { this.cipher = new FieldCipher(dataKey || "local-only-dev-key", "identity"); }
+  private async sync(id: string) { const p = await this.get(id); if (p) await this.crm?.emit({ entityType: "participant", entityId: p.id, entityVersion: p.version, payload: { firstName: p.firstName, surname: p.surname, phone: p.status === "deleted" ? null : maskPhone(p.channelUid), location: p.location, status: p.status } }); return p!; }
   uid(raw: string) { return normalisePhone(raw, this.defaultCountryCode); }
   mask(p: Participant | null) { return p ? { id: p.id, firstName: p.firstName, surname: p.surname, location: p.location, status: p.status, phone: maskPhone(p.channelUid), identityMask: p.identityMask, identityVerifiedAt: p.identityVerifiedAt, version: p.version, createdAt: p.createdAt } : null; }
   async byUid(uid: string) { const [p] = await this.db.select().from(participants).where(and(eq(participants.channel, "whatsapp"), eq(participants.channelUid, uid))); return p ?? null; }
@@ -58,7 +61,7 @@ export class ParticipantService {
     const identityFields = patch.identity ? { identityEnc: this.cipher.encrypt(normIdentity(patch.identity)), identityMask: maskIdentity(patch.identity), identityFp: this.cipher.fingerprint(normIdentity(patch.identity)) } : {};
     await this.db.update(participants).set({ firstName: patch.firstName ?? p.firstName, surname: patch.surname ?? p.surname, location: patch.location ?? p.location, ...identityFields, version: p.version + 1, updatedAt: new Date().toISOString() }).where(eq(participants.id, id));
     await this.audit.record(this.db, { actorType: "staff", actorId, action: "participant.correct", targetType: "participant", targetId: id, reason, payload: { fields: Object.keys(patch).filter((k) => (patch as Record<string, unknown>)[k] != null) } });
-    return (await this.get(id))!;
+    return this.sync(id);
   }
   async revealIdentity(id: string, actorId: string, reason: string) {
     if (!reason) throw invalid("reason required");
@@ -74,7 +77,7 @@ export class ParticipantService {
       await tx.update(participants).set({ status: "withdrawn", version: p.version + 1, updatedAt: new Date().toISOString() }).where(eq(participants.id, id));
       await this.audit.record(tx, { actorType: actorId ? "staff" : "participant", actorId: actorId ?? id, action: "participant.withdraw", targetType: "participant", targetId: id, reason });
     });
-    return (await this.get(id))!;
+    return this.sync(id);
   }
   /** Privacy deletion: personal fields removed and channel identity detached; ledger, audit and draw references remain. */
   async anonymise(id: string, actorId: string, reason: string) {
@@ -84,7 +87,7 @@ export class ParticipantService {
       await tx.update(enrollments).set({ withdrawnAt: sql`coalesce(${enrollments.withdrawnAt}, now())` }).where(eq(enrollments.participantId, id));
       await this.audit.record(tx, { actorType: "staff", actorId, action: "participant.anonymise", targetType: "participant", targetId: id, reason });
     });
-    return (await this.get(id))!;
+    return this.sync(id);
   }
   /** Controlled phone change: never merges two participants. */
   async changePhone(id: string, newPhone: string, actorId: string, reason: string) {
@@ -93,7 +96,7 @@ export class ParticipantService {
     const p = await this.get(id); if (!p) throw notFound("participant");
     await this.db.update(participants).set({ channelUid: uid, version: p.version + 1, updatedAt: new Date().toISOString() }).where(eq(participants.id, id));
     await this.audit.record(this.db, { actorType: "staff", actorId, action: "participant.phone_change", targetType: "participant", targetId: id, reason, payload: { to: maskPhone(uid) } });
-    return (await this.get(id))!;
+    return this.sync(id);
   }
   async search({ q = "", campaignId = null, limit = 50, offset = 0 }: { q?: string; campaignId?: string | null; limit?: number; offset?: number }) {
     const like = `%${q.replace(/[%_]/g, "")}%`;

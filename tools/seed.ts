@@ -7,4 +7,5 @@ if (app.environment === "production") { console.error("refusing to seed sample d
 const c = await ensureSampleCampaign(app); console.log(c.seeded ? `[seed] created ${c.campaign.code}` : `[seed] ${c.campaign.code} already present`);
 for (const s of await ensureSampleStaff(app)) console.log(`[seed] staff ${s.email} (${s.roles.join(",")}) temporary password: ${s.temporaryPassword}`);
 if (!process.argv.includes("--light")) await runSampleJourneys(app);
+const cp = await app.audit.checkpoint("seed"); console.log(`[seed] audit checkpoint ${cp?.id ?? "none"} (${cp?.signed ? "signed" : "UNSIGNED: set AUDIT_SIGNING_KEY"})`);
 await app.close(); process.exit(0);

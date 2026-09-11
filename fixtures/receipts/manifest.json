@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T22:15:15.192Z",
+  "generatedAt": "2026-09-10T22:44:35.475Z",
   "fictional": true,
   "note": "All receipts, retailers and purchases are synthetic fixtures. Expected values are benchmark labels; the pipeline never reads this file.",
   "fixtures": [
@@ -60,7 +60,7 @@
         "outlet": "MOP-HRE-01"
       },
       "duplicateOf": null,
-      "bytes": 62569
+      "bytes": 62489
     },
     {
       "id": "valid-three-pack-A",
@@ -228,7 +228,7 @@
         "outlet": "MOP-HRE-01"
       },
       "duplicateOf": null,
-      "bytes": 44179
+      "bytes": 44157
     },
     {
       "id": "blurred-A",
@@ -243,7 +243,7 @@
         "outlet": "MOP-HRE-01"
       },
       "duplicateOf": null,
-      "bytes": 17890
+      "bytes": 17908
     },
     {
       "id": "dark-A",
@@ -258,7 +258,7 @@
         "outlet": "MOP-HRE-01"
       },
       "duplicateOf": null,
-      "bytes": 42560
+      "bytes": 18298
     },
     {
       "id": "random-photo",
@@ -291,7 +291,7 @@
         "disposition": "duplicate"
       },
       "duplicateOf": "valid-two-pack-A",
-      "bytes": 65133
+      "bytes": 65132
     },
     {
       "id": "dup-cropped-A",
@@ -301,7 +301,7 @@
         "disposition": "duplicate"
       },
       "duplicateOf": "valid-two-pack-A",
-      "bytes": 61819
+      "bytes": 61973
     },
     {
       "id": "dup-recompressed-A",
@@ -331,7 +331,7 @@
         "disposition": "duplicate"
       },
       "duplicateOf": "valid-two-pack-B",
-      "bytes": 51043
+      "bytes": 51116
     },
     {
       "id": "pool-01-B",

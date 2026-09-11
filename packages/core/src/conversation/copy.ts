@@ -36,6 +36,7 @@ export const MESSAGES: Record<string, string> = {
   outlet_pick_number: "Please reply with one of the numbers shown, type to search, or BACK.",
   outlet_confirmed: "Outlet: {outlet}.\n\nNow send ONE clear photo of the whole receipt. The shop name, date, receipt number and the sugar line must be readable. Avoid glare and shadows.",
   received: "We have received your receipt. Your submission reference is {reference}. We are checking it now and will message you with the result.",
+  received_outlet: "We have received your receipt for {outlet}. Your submission reference is {reference}. We are checking it now and will message you with the result.\n\nBought somewhere else? Reply 2 and choose the shop before sending the next photo.",
   still_checking: "Receipt {reference} is still being checked. We'll message you when it's done — no need to send it again.",
   qualified: "Thank you for entering {campaign}! Receipt {reference} qualifies and ONE entry has been added to the draw.{count_line} Good luck!\n\nYou can enter again with a different qualifying receipt — reply 2.",
   qualified_count: " You now have {count} qualified {entries_word}.",

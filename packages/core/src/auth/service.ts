@@ -11,7 +11,8 @@ const { staffUsers, staffSessions } = schema;
 export type StaffUser = { id: string; email: string; name: string; roles: string[]; status: string; mfaEnabled: boolean; mustChangePassword: boolean; lastLoginAt: string | null; createdAt: string };
 const pub = (u: typeof staffUsers.$inferSelect): StaffUser => ({ id: u.id, email: u.email, name: u.name, roles: u.roles, status: u.status, mfaEnabled: u.mfaEnabled, mustChangePassword: u.mustChangePassword, lastLoginAt: u.lastLoginAt, createdAt: u.createdAt });
 const strong = (pw: string) => typeof pw === "string" && pw.length >= 14 && /[a-z]/.test(pw) && /[A-Z0-9]/.test(pw);
-const tempPassword = () => { const a = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; let s = ""; const b = Buffer.from(randomHex(20), "hex"); for (let i = 0; i < 18; i++) s += a[b[i] % a.length]; return `${s.slice(0, 6)}-${s.slice(6, 12)}-${s.slice(12)}`; };
+/** 18 unambiguous characters in three groups; regenerated until it carries both a lower-case letter and an upper-case letter or digit. */
+const tempPassword = (): string => { const a = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; let s = ""; const b = Buffer.from(randomHex(20), "hex"); for (let i = 0; i < 18; i++) s += a[b[i] % a.length]; const pw = `${s.slice(0, 6)}-${s.slice(6, 12)}-${s.slice(12)}`; return strong(pw) ? pw : tempPassword(); };
 
 /**
  * Named staff accounts, scrypt passwords, opaque hashed session tokens, TOTP MFA

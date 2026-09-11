@@ -16,7 +16,7 @@ export type ConversationResult = { replies: string[]; state: string; campaignId:
 type Nav = { mode: "retailers" | "branches" | "search"; retailer?: string; page: number; options: Array<{ label: string; value: string; kind: "retailer" | "outlet" | "more" }>; query?: string };
 type Ctx = { reg?: Record<string, string | boolean | undefined>; nav?: Nav; outletId?: string; outletLabel?: string; lastSubmissionId?: string; winnerNav?: Array<{ label: string; value: string }> };
 
-export interface SubmissionIntake { submit(input: { campaignId: string; campaignVersionId: string; participantId: string; conversationId: string; inboundEventId: string; providerMessageId: string; uid: string; imageBytes: Buffer; selectedOutletId: string; correlationId?: string | null; eventAt?: string | null }): Promise<{ submissionId: string; reference: string; replay: boolean }>; }
+export interface SubmissionIntake { submit(input: { campaignId: string; campaignVersionId: string; participantId: string; conversationId: string; inboundEventId: string; providerMessageId: string; uid: string; imageBytes: Buffer; selectedOutletId: string; correlationId?: string | null; eventAt?: string | null; reuploadOf?: string | null }): Promise<{ submissionId: string; reference: string; replay: boolean }>; statusOf(submissionId: string): Promise<string | null>; }
 export interface WinnersReadModel { publishedPeriods(campaignId: string): Promise<Array<{ code: string; label: string }>>; listPublic(campaignId: string, period: string): Promise<Array<{ rank: number; name: string; location: string | null; prize: string }>>; }
 export interface CrmEmitter { emit(e: { entityType: string; entityId: string; entityVersion: number; payload: Record<string, unknown>; correlationId?: string | null }): Promise<unknown>; }
 
@@ -73,7 +73,9 @@ export class ConversationEngine {
     const controls = await campaigns.controls(cid);
 
     if (intent === "MENU") return home();
-    if (intent === "HELP") return reply(state, render(M, "help"));
+    // A numbered option on the current screen wins over the "9 = help" shortcut (page lists end in "9. More…").
+    const numberedOption = number != null && state === "OUTLET" && Boolean(ctx.nav?.options[number - 1]);
+    if (intent === "HELP" && !numberedOption) return reply(state, render(M, "help"));
     if (intent === "CANCEL") { await save("HOME", {}); return reply("HOME", render(M, "cancel")); }
 
     const registration = async (): Promise<ConversationResult> => {
@@ -168,7 +170,7 @@ export class ConversationEngine {
       }
       return reply(state, render(M, "outlet_pick_number"));
     };
-    const receiptFlow = async (): Promise<ConversationResult> => {
+    const receiptFlow = async ({ remembered = false } = {}): Promise<ConversationResult> => {
       if (intent === "BACK") return showRetailers(0);
       if (intent === "ENTER") return startEntry();
       if (!isImage) return reply("RECEIPT", render(M, "need_photo"));
@@ -177,9 +179,11 @@ export class ConversationEngine {
       if (controls.pauseIntake) return reply("HOME", render(M, "paused"));
       const conversationId = session!.id;
       try {
-        const res = await this.deps.intake.submit({ campaignId: cid, campaignVersionId: version.id, participantId: participant.id, conversationId, inboundEventId: input.eventId, providerMessageId: input.providerMessageId, uid, imageBytes: input.mediaBytes, selectedOutletId: ctx.outletId, correlationId: input.correlationId, eventAt: input.eventAt });
-        await save("HOME", { lastSubmissionId: res.submissionId, outletId: ctx.outletId }, { activeSubmissionId: res.submissionId });
-        return reply("HOME", render(M, res.replay ? "still_checking" : "received", { reference: res.reference }), { submissionId: res.submissionId });
+        // a photo that follows a re-upload request is linked to that attempt (one thread for the participant and the reviewer)
+        const reuploadOf = ctx.lastSubmissionId && (await this.deps.intake.statusOf(ctx.lastSubmissionId)) === "reupload" ? ctx.lastSubmissionId : null;
+        const res = await this.deps.intake.submit({ campaignId: cid, campaignVersionId: version.id, participantId: participant.id, conversationId, inboundEventId: input.eventId, providerMessageId: input.providerMessageId, uid, imageBytes: input.mediaBytes, selectedOutletId: ctx.outletId, correlationId: input.correlationId, eventAt: input.eventAt, reuploadOf });
+        await save("HOME", { lastSubmissionId: res.submissionId, outletId: ctx.outletId, outletLabel: ctx.outletLabel }, { activeSubmissionId: res.submissionId });
+        return reply("HOME", render(M, res.replay ? "still_checking" : remembered ? "received_outlet" : "received", { reference: res.reference, outlet: ctx.outletLabel ?? "" }), { submissionId: res.submissionId });
       } catch (e) {
         const code = (e as { code?: string }).code;
         if (code === "MEDIA_REJECTED") return reply("RECEIPT", render(M, "media_rejected", { reason: (e as Error).message }));
@@ -217,7 +221,12 @@ export class ConversationEngine {
         if (intent === "PRIZES") return reply("HOME", infoText("prizes"));
         if (intent === "WINNERS") return this.winnersFlow({ cid, M, ctx, state, number, fresh: true, save, reply });
         if (intent === "STATUS") return statusText();
-        if (isImage) return reply("HOME", [render(M, "need_photo"), menu()]);
+        if (isImage) {
+          // A further photo after a submission (or a re-upload request) reuses the outlet the participant chose; the
+          // acknowledgement names it and says how to change it. The header cross-check still catches a wrong shop.
+          if (participant && enrollment && !enrollment.withdrawnAt && ctx.outletId && ctx.lastSubmissionId && !controls.pauseIntake && campaign.status === "active") return receiptFlow({ remembered: true });
+          return reply("HOME", [render(M, "need_photo"), menu()]);
+        }
         if (intent === "GREETING" || intent === "BACK") return home();
         return reply("HOME", render(M, "unknown", { menu: menu() }));
       }

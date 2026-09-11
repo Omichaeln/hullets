@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 
 /** Configuration schema. `doc` feeds .env.example and the preflight; secret values are never printed. */
@@ -7,6 +9,7 @@ export const CONFIG_DOC: Array<{ name: string; default: string; description: str
   { name: "HOST", default: "127.0.0.1", description: "Bind address (0.0.0.0 on a PaaS)." },
   { name: "PORT", default: "8080", description: "HTTP port for API, webhook and console." },
   { name: "PUBLIC_BASE_URL", default: "", description: "Public HTTPS origin of this service (webhook URL, console links)." },
+  { name: "CORS_ORIGINS", default: "", description: "Comma-separated browser origins allowed to call the API cross-origin. Empty (default) when the API serves the console itself." },
   { name: "MEDIA_ROOT", default: "./data/media", description: "Private receipt media root (filesystem adapter). Never inside the web root." },
   { name: "STORAGE_DRIVER", default: "fs", description: "fs | s3 (S3-compatible bucket via S3_* variables)." },
   { name: "S3_BUCKET", default: "", description: "Bucket for STORAGE_DRIVER=s3." },
@@ -48,7 +51,8 @@ export const CONFIG_DOC: Array<{ name: string; default: string; description: str
 const Env = z.object({
   ENVIRONMENT: z.enum(["local", "test", "staging", "production"]).default("local"),
   DATABASE_URL: z.string().default("postgres://promo:promo@127.0.0.1:5432/promo"),
-  HOST: z.string().default("127.0.0.1"), PORT: z.coerce.number().int().positive().default(8080), PUBLIC_BASE_URL: z.string().default(""),
+  HOST: z.string().default("127.0.0.1"), PORT: z.coerce.number().int().nonnegative().default(8080), PUBLIC_BASE_URL: z.string().default(""),
+  CORS_ORIGINS: z.string().default("").transform((v) => v.split(",").map((o) => o.trim()).filter(Boolean)),
   MEDIA_ROOT: z.string().default("./data/media"), STORAGE_DRIVER: z.enum(["fs", "s3"]).default("fs"),
   S3_BUCKET: z.string().default(""), S3_ENDPOINT: z.string().default(""), S3_REGION: z.string().default("us-east-1"), S3_ACCESS_KEY_ID: z.string().default(""), S3_SECRET_ACCESS_KEY: z.string().default(""),
   BOOTSTRAP_ADMIN_EMAIL: z.string().default(""), BOOTSTRAP_ADMIN_PASSWORD: z.string().default(""),
@@ -63,7 +67,15 @@ const Env = z.object({
 });
 export type Config = z.infer<typeof Env> & { isProduction: boolean; isLocal: boolean; outboundAllowlist: string[] };
 
+/** Reads a local .env file (KEY=value lines) into process.env without overriding values already set. Never logs values. */
+export function loadDotEnv(file = process.env.ENV_FILE ?? ".env") {
+  let text: string; try { text = fs.readFileSync(path.resolve(file), "utf8"); } catch { return 0; }
+  let n = 0;
+  for (const raw of text.split(/\r?\n/)) { const line = raw.trim(); if (!line || line.startsWith("#")) continue; const m = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/); if (!m) continue; let v = m[2].trim(); if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1); if (process.env[m[1]] === undefined) { process.env[m[1]] = v; n++; } }
+  return n;
+}
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  if (env === process.env) loadDotEnv();
   const parsed = Env.safeParse(env);
   if (!parsed.success) throw new Error(`configuration invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   const c = parsed.data;

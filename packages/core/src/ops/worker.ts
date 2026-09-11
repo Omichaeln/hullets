@@ -1,3 +1,4 @@
+import type { AuditService } from "../audit.ts";
 import type { Db } from "@promo/db";
 import type { QueueService, InboundEvent } from "./queue.ts";
 import type { OutboxService } from "./outbox.ts";
@@ -21,7 +22,7 @@ import { SendError } from "../whatsapp/transport.ts";
  */
 export class Worker {
   private timer: NodeJS.Timeout | null = null; private running = false; private ticks = 0; private lastTickAt: string | null = null;
-  constructor(private d: { db: Db; cfg: Config; environment: string; queue: QueueService; outbox: OutboxService; crm: CrmService; transport: WhatsAppTransport; conversation: ConversationEngine; pipeline: ReceiptPipeline; winners: WinnerService; media: MediaService; campaigns: CampaignService; signals: OpsSignals; log: Logger; intervalMs?: number }) {}
+  constructor(private d: { db: Db; cfg: Config; environment: string; queue: QueueService; outbox: OutboxService; crm: CrmService; transport: WhatsAppTransport; conversation: ConversationEngine; pipeline: ReceiptPipeline; winners: WinnerService; media: MediaService; campaigns: CampaignService; signals: OpsSignals; audit: AuditService; log: Logger; intervalMs?: number }) {}
   start() { if (!this.timer) this.timer = setInterval(() => void this.tick(), this.d.intervalMs ?? 1500); }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
   health() { return { running: !!this.timer, ticks: this.ticks, lastTickAt: this.lastTickAt }; }
@@ -66,6 +67,7 @@ export class Worker {
       const p = job.payload as { submissionId?: string };
       if (job.kind === "submission.process") { const r = await this.d.pipeline.process(p.submissionId!); const s = await this.d.pipeline.get(p.submissionId!); if (s && !["received", "processing", "delayed"].includes(s.status)) { const part = await this.d.db.query.participants.findFirst({ where: (t, { eq }) => eq(t.id, s.participantId) }); if (part) await this.d.conversation.onSubmissionOutcome(s.campaignId, part.channelUid, s.id); } void r; }
       else if (job.kind === "winners.expire") await this.d.winners.expireDue();
+      else if (job.kind === "audit.checkpoint") await this.d.audit.checkpoint("system:housekeeping");
       else if (job.kind === "media.purge") await this.d.media.purgeExpired();
       else throw Object.assign(new Error(`unknown job kind ${job.kind}`), { permanent: true });
       await this.d.queue.completeJob(job.id); return true;
@@ -95,6 +97,7 @@ export class Worker {
       const ob = await this.d.outbox.stats(); if ((ob.byStatus.unknown_outcome ?? 0) + (ob.byStatus.permanent_failure ?? 0) > 0) await this.d.signals.raise({ kind: "outbound.failures", severity: "warning", message: `outbound failures: ${JSON.stringify(ob.byStatus)}`, runbook: "docs/runbooks/provider-outage.md" });
       const hour = new Date().toISOString().slice(0, 13);
       await this.d.queue.enqueueJob(this.d.db, "winners.expire", {}, { dedupeKey: `winners.expire:${hour}` });
+      await this.d.queue.enqueueJob(this.d.db, "audit.checkpoint", {}, { dedupeKey: `audit.checkpoint:${new Date().toISOString().slice(0, 10)}` }); // a signed chain head every day
       await this.d.queue.enqueueJob(this.d.db, "media.purge", {}, { dedupeKey: `media.purge:${new Date().toISOString().slice(0, 10)}` });
     } catch (e) { this.d.log.error({ err: (e as Error).message }, "housekeeping failed"); }
   }

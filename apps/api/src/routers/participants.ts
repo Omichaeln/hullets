@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { schema } from "@promo/db";
 import { router, guard } from "../trpc.ts";
 import { notFound } from "@promo/core";

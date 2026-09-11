@@ -46,6 +46,7 @@ export class ReceiptPipeline {
   constructor(private db: Db, private deps: { media: MediaService; extractor: Extractor; campaigns: CampaignService; participants: ParticipantService; audit: AuditService; outbox: OutboxService; queue: QueueService; crm?: CrmEmitter | null; alerts: AlertSink; reviewSlaHours: number }) {}
 
   async get(id: string) { const [s] = await this.db.select().from(submissions).where(eq(submissions.id, id)); return s ?? null; }
+  async statusOf(id: string) { const [s] = await this.db.select({ status: submissions.status }).from(submissions).where(eq(submissions.id, id)); return s?.status ?? null; }
 
   async submit(input: { campaignId: string; campaignVersionId: string; participantId: string; conversationId: string; inboundEventId: string; providerMessageId: string; uid: string; imageBytes: Buffer; selectedOutletId: string; correlationId?: string | null; eventAt?: string | null; reuploadOf?: string | null }) {
     const [existing] = await this.db.select().from(submissions).where(eq(submissions.providerMessageId, input.providerMessageId));
@@ -110,7 +111,7 @@ export class ReceiptPipeline {
         const tot = facts.transaction.totalMinor;
         if (canonical.totalMinor != null && tot != null && canonical.totalMinor !== tot) { disposition = "review"; reason = "identity_conflict"; await tx.insert(duplicateCandidates).values({ id: newId("dup"), submissionId, candidateSubmissionId: canonical.creditedSubmissionId ?? canonical.firstSubmissionId, kind: "canonical", score: 0.5 }).onConflictDoNothing(); }
         else if (canonical.status === "credited") dupOf = canonical.creditedSubmissionId ?? canonical.firstSubmissionId;
-        else if (first && first.participantId !== s.participantId && (["review", "received", "processing", "delayed"].includes(first.status) || disposition === "qualified")) { disposition = "review"; reason = "ownership_dispute"; }
+        else if (first && first.participantId !== s.participantId && (["review", "received", "processing", "delayed"].includes(first.status) || disposition === "qualified")) { disposition = "review"; reason = "ownership_dispute"; await tx.insert(duplicateCandidates).values({ id: newId("dup"), submissionId, candidateSubmissionId: first.id, kind: "canonical", score: 0.5 }).onConflictDoNothing(); }
         else if (first && first.participantId === s.participantId && !s.reuploadOf) await tx.update(submissions).set({ reuploadOf: first.id }).where(eq(submissions.id, submissionId));
       }
       if (!dupOf && exact.length) { const credited = exact.find((c) => c.status === "qualified"); if (credited) dupOf = credited.id; }
@@ -134,7 +135,7 @@ export class ReceiptPipeline {
     if (!asset.ahash && !asset.dhash) return [];
     const rows = await this.db.select({ id: submissions.id, ahash: mediaAssets.ahash, dhash: mediaAssets.dhash }).from(submissions).innerJoin(mediaAssets, eq(mediaAssets.id, submissions.mediaAssetId)).where(and(eq(submissions.campaignId, s.campaignId), ne(submissions.id, s.id))).orderBy(desc(submissions.createdAt)).limit(4000);
     const out: Array<{ id: string; kind: string; score: number; distance: number }> = [];
-    for (const r of rows) { const da = hamming(asset.ahash, r.ahash), dd = hamming(asset.dhash, r.dhash); const d = Math.min(da, dd); if (d <= PROBABLE_VISUAL_DISTANCE) out.push({ id: r.id, kind: da <= dd ? "visual_ahash" : "visual_dhash", score: Number((1 - d / 64).toFixed(3)), distance: d }); }
+    for (const r of rows) { const da = hamming(asset.ahash, r.ahash), dd = hamming(asset.dhash, r.dhash); const d = Math.max(da, dd); /* both hashes must agree: same-layout receipts share an aHash but not a dHash */ if (d <= PROBABLE_VISUAL_DISTANCE) out.push({ id: r.id, kind: "visual", score: Number((1 - d / 64).toFixed(3)), distance: d }); }
     return out.sort((a, b) => a.distance - b.distance).slice(0, 5);
   }
 
