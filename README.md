@@ -1,4 +1,4 @@
-# Hullets Promotions — WhatsApp receipt promotion platform
+# Huletts Promotions — WhatsApp receipt promotion platform
 
 A WhatsApp-native promotion engine for a retail brand: consumers register, photograph a till receipt, and are awarded draw entries when the purchase meets the campaign rules. Staff run reviews, draws, prize claims and reporting from a web console. Every consequential action is recorded in a hash-chained audit log.
 

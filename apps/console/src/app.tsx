@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { trpc, makeClient, session } from "./lib/trpc.ts";
 import { AuthProvider, useMe, useCan, type Me, type Permission } from "./lib/auth.tsx";
 import { usePath, match, Link, navigate } from "./lib/router.tsx";
-import { ToastProvider, Button, Loading } from "./ui/kit.tsx";
+import { ToastProvider, Button, Loading, Brand } from "./ui/kit.tsx";
 import { LoginPage } from "./pages/login.tsx";
 import { AccountPage } from "./pages/account.tsx";
 import { OverviewPage } from "./pages/overview.tsx";
@@ -36,7 +36,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <div className="tt-shell">
     {open && <div className="tt-scrim" onClick={() => setOpen(false)} />}
     <aside className={`tt-sidebar ${open ? "open" : ""}`}>
-      <div className="tt-brand"><span className="mark">H</span><span>Hullets Promotions</span></div>
+      <div className="tt-brand"><Brand lockup="horizontal" height={26} /></div>
       <nav className="tt-nav">{NAV.map((g) => { const items = g.items.filter((i) => !i.perm || can(i.perm)); if (!items.length) return null; return <div key={g.group}><div className="tt-nav-group">{g.group}</div>{items.map((i) => <Link key={i.to} to={i.to} className={(i.to === "/" ? path === "/" : path.startsWith(i.to)) ? "active" : ""}>{i.label}</Link>)}</div>; })}</nav>
       <div style={{ marginTop: "auto", padding: 8 }} className="small muted">{me?.name}<br />{me?.roles.join(", ")}</div>
     </aside>

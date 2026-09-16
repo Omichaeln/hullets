@@ -1,4 +1,4 @@
-# Hullets Promotions — API + embedded worker + static console.
+# Huletts Promotions — API + embedded worker + static console.
 # Build: docker build -t hullets . · Run: docker run --env-file .env -p 8080:8080 hullets
 FROM node:22-bookworm-slim AS build
 WORKDIR /app

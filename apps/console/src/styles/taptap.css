@@ -1,25 +1,78 @@
-/* TapTap design system — console implementation.
-   Tokens: primary teal #00D9C5 (hover #00c4b2, text-on-primary #062a27, link #0b8f84), slate neutrals,
-   Inter/system type, 4px spacing scale, radii 6/8/12, three elevation levels, light + dark themes. */
+/* TapTap design system — console implementation, in the Huletts brand.
+   Tokens: primary Huletts blue #002F87, danger Huletts red #D7282F, slate neutrals, Montserrat
+   (standing in for Gotham) type, 4px spacing scale, radii 6/8/12, three elevation levels,
+   light + dark themes.
+
+   Colour. The brand's primary palette is exactly two values: Pantone 287 C (blue) and Pantone
+   1795 C (red). Interaction in this console is BLUE. Red is the brand's hero colour, but this is
+   a tool whose job includes disqualifying a shopper's entry and reporting failed deliveries, and
+   a red button reads as "stop" to everyone regardless of what a brand book says. So blue carries
+   every interactive state and red carries brand identity plus the one meaning red genuinely has
+   here.
+
+   Two derivations the brand book does not reach, both forced by contrast rather than taste, and
+   both measured rather than judged by eye:
+
+   - DARK MODE. Huletts blue on this theme's #111a2b surface is 1.46:1 — invisible. The dark theme
+     therefore raises the LIGHTNESS of each brand hue while holding hue and saturation exactly, so
+     it stays recognisably the same colour rather than drifting to a different blue. The logo
+     follows the brand's own reverse rule and goes white; nothing is recoloured by CSS.
+   - RED TEXT. Brand red as small text on a visible pink tint is 4.11:1, under AA. Brand red is
+     kept for everything red is SEEN as — fills, dots, solid buttons, the mark — and a darkened
+     shade of the same hue carries red TEXT where AA demands it. It is a derivative, not a second
+     brand colour.
+
+   Every foreground/background pair below is >= 4.5:1. The ratios are in docs/brand.md and pinned
+   by tests/unit/brand.test.ts, which recomputes them so a later token edit cannot quietly break
+   one.
+
+   Type. The brand fonts are Gotham Black (headlines) and Gotham Book (body). Gotham is licensed
+   from Hoefler&Co and cannot be redistributed, so it is named FIRST in the stack and will be used
+   the moment a licensed copy is dropped into public/brand/fonts. Until then this renders in
+   Montserrat, self-hosted so there is no runtime dependency on a font CDN. */
+
+@font-face {
+  font-family: "Montserrat";
+  src: url("/brand/fonts/montserrat-latin.woff2") format("woff2");
+  font-weight: 400 900;          /* variable: one file covers body to display */
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 :root {
-  --tt-primary: #00D9C5; --tt-primary-hover: #00c4b2; --tt-primary-active: #00ad9d; --tt-on-primary: #062a27; --tt-primary-soft: #d9faf6; --tt-primary-soft-2: #b3f4ec; --tt-link: #0b8f84;
+  /* Brand primaries — do not alter these two values. */
+  --huletts-blue: #002F87;       /* Pantone 287 C  · C100 M86 Y19 K10 */
+  --huletts-red:  #D7282F;       /* Pantone 1795 C · C10 M97 Y92 K1  */
+
+  --tt-primary: var(--huletts-blue); --tt-primary-hover: #0039A3; --tt-primary-active: #00256B;
+  /* Two distinct jobs that teal could serve with one value and navy cannot: text ON solid
+     primary must be white (11.96:1), text on the pale primary TINT must be the navy (9.92:1).
+     Splitting them also removes the two dark-mode override rules this file used to need. */
+  --tt-on-primary: #FFFFFF; --tt-on-primary-soft: var(--huletts-blue);
+  --tt-primary-soft: #E6EAF3; --tt-primary-soft-2: #CCD5E7; --tt-link: var(--huletts-blue);
   --tt-bg: #f6f8fa; --tt-surface: #ffffff; --tt-surface-2: #f1f4f7; --tt-border: #dfe4ea; --tt-border-strong: #c6ced8;
   --tt-text: #0f172a; --tt-text-2: #475569; --tt-text-3: #64748b; --tt-muted: #94a3b8;
-  --tt-success: #15803d; --tt-success-soft: #dcfce7; --tt-warning: #b45309; --tt-warning-soft: #fef3c7; --tt-danger: #b91c1c; --tt-danger-soft: #fee2e2; --tt-info: #1d4ed8; --tt-info-soft: #dbeafe;
-  --tt-font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --tt-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --tt-success: #15803d; --tt-success-soft: #dcfce7; --tt-warning: #b45309; --tt-warning-soft: #fef3c7;
+  /* --tt-danger is the brand red, used wherever red is seen as colour. --tt-danger-text is the
+     same hue darkened to L38 so small red text clears AA on the tint (6.29:1 vs 4.11:1). */
+  --tt-danger: var(--huletts-red); --tt-danger-text: #A31E24; --tt-danger-soft: #FAE5E6;
+  /* Info is the brand blue: a second, unrelated blue beside the primary reads as a mistake. */
+  --tt-info: var(--huletts-blue); --tt-info-soft: #E6EAF3;
+  --tt-font: "Gotham Book", "Gotham", "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --tt-font-display: "Gotham Black", "Gotham", "Montserrat", var(--tt-font); --tt-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --tt-r-sm: 6px; --tt-r-md: 8px; --tt-r-lg: 12px;
   --tt-sh-1: 0 1px 2px rgba(15, 23, 42, .06); --tt-sh-2: 0 4px 12px rgba(15, 23, 42, .08); --tt-sh-3: 0 16px 40px rgba(15, 23, 42, .16);
-  --tt-focus: 0 0 0 3px rgba(0, 217, 197, .35);
+  --tt-focus: 0 0 0 3px rgba(0, 47, 135, .32);
   --tt-s1: 4px; --tt-s2: 8px; --tt-s3: 12px; --tt-s4: 16px; --tt-s5: 20px; --tt-s6: 24px; --tt-s8: 32px; --tt-s10: 40px;
   --tt-sidebar: 248px;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --tt-bg: #0b1220; --tt-surface: #111a2b; --tt-surface-2: #172236; --tt-border: #223047; --tt-border-strong: #2f4060; --tt-text: #e6edf6; --tt-text-2: #b6c2d3; --tt-text-3: #8fa0b8; --tt-muted: #64748b; --tt-primary-soft: #0f2f2c; --tt-primary-soft-2: #134542; --tt-link: #3fd9ca; --tt-success-soft: #0f2e1a; --tt-warning-soft: #3a2a0a; --tt-danger-soft: #3b1212; --tt-info-soft: #14213f; --tt-success: #4ade80; --tt-warning: #fbbf24; --tt-danger: #f87171; --tt-info: #93c5fd; --tt-sh-1: 0 1px 2px rgba(0,0,0,.4); --tt-sh-2: 0 4px 12px rgba(0,0,0,.45); --tt-sh-3: 0 16px 40px rgba(0,0,0,.6); } }
-:root[data-theme="dark"] { --tt-bg: #0b1220; --tt-surface: #111a2b; --tt-surface-2: #172236; --tt-border: #223047; --tt-border-strong: #2f4060; --tt-text: #e6edf6; --tt-text-2: #b6c2d3; --tt-text-3: #8fa0b8; --tt-muted: #64748b; --tt-primary-soft: #0f2f2c; --tt-primary-soft-2: #134542; --tt-link: #3fd9ca; --tt-success-soft: #0f2e1a; --tt-warning-soft: #3a2a0a; --tt-danger-soft: #3b1212; --tt-info-soft: #14213f; --tt-success: #4ade80; --tt-warning: #fbbf24; --tt-danger: #f87171; --tt-info: #93c5fd; --tt-sh-1: 0 1px 2px rgba(0,0,0,.4); --tt-sh-2: 0 4px 12px rgba(0,0,0,.45); --tt-sh-3: 0 16px 40px rgba(0,0,0,.6); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --tt-bg: #0b1220; --tt-surface: #111a2b; --tt-surface-2: #172236; --tt-border: #223047; --tt-border-strong: #2f4060; --tt-text: #e6edf6; --tt-text-2: #b6c2d3; --tt-text-3: #8fa0b8; --tt-muted: #64748b; --tt-primary: #5C95FF; --tt-on-primary: #0b1220; --tt-on-primary-soft: #5C95FF; --tt-primary-hover: #7AA8FF; --tt-primary-active: #4D8BFF; --tt-primary-soft: #1C2B49; --tt-primary-soft-2: #24365C; --tt-link: #5C95FF; --tt-success-soft: #0f2e1a; --tt-warning-soft: #3a2a0a; --tt-danger: #E15C61; --tt-danger-text: #E15C61; --tt-danger-soft: #1D1E2E; --tt-info: #5C95FF; --tt-info-soft: #1C2B49; --tt-success: #4ade80; --tt-warning: #fbbf24; --tt-focus: 0 0 0 3px rgba(92, 149, 255, .38); --tt-sh-1: 0 1px 2px rgba(0,0,0,.4); --tt-sh-2: 0 4px 12px rgba(0,0,0,.45); --tt-sh-3: 0 16px 40px rgba(0,0,0,.6); } }
+:root[data-theme="dark"] { --tt-bg: #0b1220; --tt-surface: #111a2b; --tt-surface-2: #172236; --tt-border: #223047; --tt-border-strong: #2f4060; --tt-text: #e6edf6; --tt-text-2: #b6c2d3; --tt-text-3: #8fa0b8; --tt-muted: #64748b; --tt-primary: #5C95FF; --tt-on-primary: #0b1220; --tt-on-primary-soft: #5C95FF; --tt-primary-hover: #7AA8FF; --tt-primary-active: #4D8BFF; --tt-primary-soft: #1C2B49; --tt-primary-soft-2: #24365C; --tt-link: #5C95FF; --tt-success-soft: #0f2e1a; --tt-warning-soft: #3a2a0a; --tt-danger: #E15C61; --tt-danger-text: #E15C61; --tt-danger-soft: #1D1E2E; --tt-info: #5C95FF; --tt-info-soft: #1C2B49; --tt-success: #4ade80; --tt-warning: #fbbf24; --tt-focus: 0 0 0 3px rgba(92, 149, 255, .38); --tt-sh-1: 0 1px 2px rgba(0,0,0,.4); --tt-sh-2: 0 4px 12px rgba(0,0,0,.45); --tt-sh-3: 0 16px 40px rgba(0,0,0,.6); }
 
 * { box-sizing: border-box; } html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--tt-bg); color: var(--tt-text); font: 14px/1.5 var(--tt-font); -webkit-font-smoothing: antialiased; }
 a { color: var(--tt-link); text-decoration: none; } a:hover { text-decoration: underline; }
-h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; } h1 { font-size: 22px; } h2 { font-size: 17px; } h3 { font-size: 15px; } h4 { font-size: 13px; color: var(--tt-text-2); text-transform: uppercase; letter-spacing: .04em; }
+h1, h2, h3, h4 { margin: 0; font-family: var(--tt-font-display); font-weight: 700; letter-spacing: -0.01em; } h1 { font-size: 22px; } h2 { font-size: 17px; } h3 { font-size: 15px; } h4 { font-size: 13px; color: var(--tt-text-2); text-transform: uppercase; letter-spacing: .04em; }
 p { margin: 0 0 var(--tt-s3); } code, pre, .mono { font-family: var(--tt-mono); font-size: 12.5px; }
 pre { background: var(--tt-surface-2); border: 1px solid var(--tt-border); border-radius: var(--tt-r-md); padding: var(--tt-s3); overflow: auto; max-height: 420px; margin: 0; white-space: pre-wrap; word-break: break-word; }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -31,18 +84,31 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tt-sidebar { background: var(--tt-surface); border-right: 1px solid var(--tt-border); padding: var(--tt-s4) var(--tt-s3); display: flex; flex-direction: column; gap: var(--tt-s1); position: sticky; top: 0; height: 100vh; overflow: auto; }
 .tt-brand { display: flex; align-items: center; gap: var(--tt-s2); padding: var(--tt-s2) var(--tt-s2) var(--tt-s4); font-weight: 700; font-size: 15px; }
 .tt-brand .mark { width: 28px; height: 28px; border-radius: 8px; background: var(--tt-primary); color: var(--tt-on-primary); display: grid; place-items: center; font-weight: 800; }
+
+/* The lock-up. content-box is load-bearing: the global border-box rule above would make the
+   clear-space padding eat the artwork's height and render the mark as a smudge. Nothing here
+   may grow into a filter, transform or shadow — the brand forbids restyling the mark, and the
+   reverse colourway is a separate file swapped below rather than an inverted colour one. */
+.brand-mark { display: inline-flex; align-items: center; }
+.brand-mark img { display: block; width: auto; box-sizing: content-box; }
+.brand-mark .on-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-mark .on-light { display: none; }
+  :root:not([data-theme="light"]) .brand-mark .on-dark { display: block; }
+}
+:root[data-theme="dark"] .brand-mark .on-light { display: none; }
+:root[data-theme="dark"] .brand-mark .on-dark { display: block; }
 .tt-nav-group { margin-top: var(--tt-s3); padding: 0 var(--tt-s2); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--tt-text-3); }
 .tt-nav a { display: flex; align-items: center; gap: var(--tt-s2); padding: 7px var(--tt-s2); border-radius: var(--tt-r-md); color: var(--tt-text-2); font-weight: 500; }
 .tt-nav a:hover { background: var(--tt-surface-2); text-decoration: none; color: var(--tt-text); }
-.tt-nav a.active { background: var(--tt-primary-soft); color: var(--tt-on-primary); font-weight: 600; }
-:root[data-theme="dark"] .tt-nav a.active { color: var(--tt-primary); } @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tt-nav a.active { color: var(--tt-primary); } }
+.tt-nav a.active { background: var(--tt-primary-soft); color: var(--tt-on-primary-soft); font-weight: 600; }
 .tt-nav a .badge { margin-left: auto; }
 .tt-main { min-width: 0; }
 .tt-topbar { display: flex; align-items: center; gap: var(--tt-s3); padding: var(--tt-s3) var(--tt-s6); border-bottom: 1px solid var(--tt-border); background: var(--tt-surface); position: sticky; top: 0; z-index: 5; }
 .tt-topbar .spacer { flex: 1; }
 .tt-content { padding: var(--tt-s6); max-width: 1440px; }
 .tt-env { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--tt-warning-soft); color: var(--tt-warning); }
-.tt-env.production { background: var(--tt-danger-soft); color: var(--tt-danger); }
+.tt-env.production { background: var(--tt-danger-soft); color: var(--tt-danger-text); }
 .tt-menu-btn { display: none; }
 @media (max-width: 900px) {
   .tt-shell { grid-template-columns: 1fr; }
@@ -81,7 +147,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.block { width: 100%; }
 
 /* Forms */
-.field { display: flex; flex-direction: column; gap: 4px; } .field > label { font-size: 12px; font-weight: 600; color: var(--tt-text-2); } .field .help { font-size: 12px; color: var(--tt-text-3); } .field .error { font-size: 12px; color: var(--tt-danger); }
+.field { display: flex; flex-direction: column; gap: 4px; } .field > label { font-size: 12px; font-weight: 600; color: var(--tt-text-2); } .field .help { font-size: 12px; color: var(--tt-text-3); } .field .error { font-size: 12px; color: var(--tt-danger-text); }
 .input, .select, .textarea { width: 100%; padding: 7px 10px; border: 1px solid var(--tt-border-strong); border-radius: var(--tt-r-md); background: var(--tt-surface); color: var(--tt-text); }
 .input:focus, .select:focus, .textarea:focus { border-color: var(--tt-primary); box-shadow: var(--tt-focus); outline: none; } .textarea { min-height: 88px; resize: vertical; } .input.mono, .textarea.mono { font-family: var(--tt-mono); font-size: 12.5px; }
 .checkbox { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; } .checkbox input { width: 16px; height: 16px; accent-color: var(--tt-primary); }
@@ -89,8 +155,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* Badges */
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--tt-surface-2); color: var(--tt-text-2); border: 1px solid transparent; white-space: nowrap; }
-.badge.success { background: var(--tt-success-soft); color: var(--tt-success); } .badge.warning { background: var(--tt-warning-soft); color: var(--tt-warning); } .badge.danger { background: var(--tt-danger-soft); color: var(--tt-danger); } .badge.info { background: var(--tt-info-soft); color: var(--tt-info); } .badge.primary { background: var(--tt-primary-soft); color: var(--tt-on-primary); }
-:root[data-theme="dark"] .badge.primary { color: var(--tt-primary); } @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge.primary { color: var(--tt-primary); } }
+.badge.success { background: var(--tt-success-soft); color: var(--tt-success); } .badge.warning { background: var(--tt-warning-soft); color: var(--tt-warning); } .badge.danger { background: var(--tt-danger-soft); color: var(--tt-danger-text); } .badge.info { background: var(--tt-info-soft); color: var(--tt-info); } .badge.primary { background: var(--tt-primary-soft); color: var(--tt-on-primary-soft); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--tt-muted); } .dot.ok { background: var(--tt-success); } .dot.warn { background: var(--tt-warning); } .dot.bad { background: var(--tt-danger); }
 
 /* Tables */
@@ -110,7 +175,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* Alerts / callouts */
 .callout { padding: var(--tt-s3) var(--tt-s4); border-radius: var(--tt-r-md); border: 1px solid var(--tt-border); background: var(--tt-surface-2); font-size: 13px; }
-.callout.warning { background: var(--tt-warning-soft); border-color: transparent; color: var(--tt-warning); } .callout.danger { background: var(--tt-danger-soft); border-color: transparent; color: var(--tt-danger); } .callout.success { background: var(--tt-success-soft); border-color: transparent; color: var(--tt-success); } .callout.info { background: var(--tt-info-soft); border-color: transparent; color: var(--tt-info); }
+.callout.warning { background: var(--tt-warning-soft); border-color: transparent; color: var(--tt-warning); } .callout.danger { background: var(--tt-danger-soft); border-color: transparent; color: var(--tt-danger-text); } .callout.success { background: var(--tt-success-soft); border-color: transparent; color: var(--tt-success); } .callout.info { background: var(--tt-info-soft); border-color: transparent; color: var(--tt-info); }
 
 /* Modal, toast */
 .modal-scrim { position: fixed; inset: 0; background: rgba(15,23,42,.5); display: grid; place-items: center; z-index: 50; padding: var(--tt-s4); }
@@ -122,7 +187,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Misc */
 .empty { padding: var(--tt-s8); text-align: center; color: var(--tt-text-3); }
 .spinner { width: 18px; height: 18px; border: 2px solid var(--tt-border-strong); border-top-color: var(--tt-primary); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; } @keyframes spin { to { transform: rotate(360deg); } }
-.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: var(--tt-s4); background: radial-gradient(1200px 600px at 20% -10%, var(--tt-primary-soft), transparent), var(--tt-bg); }
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: var(--tt-s4); background: radial-gradient(1200px 600px at 20% -10%, var(--tt-primary-soft), transparent), var(--tt-bg); position: relative; overflow: hidden; }
+/* The wave device, at its own 13 degrees, bleeding off the corner as the guidelines show it.
+   It is decorative only, so it is out of the accessibility tree and ignores pointer events.
+   It takes the same reverse colourway as the lock-up: the red wave on a dark ground reads as a
+   maroon smudge rather than the brand's device. */
+.login-wave { position: absolute; right: -6vw; bottom: -4vh; width: min(52vw, 620px); opacity: .14; pointer-events: none; user-select: none; }
+.login-wave.on-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .login-wave.on-light { display: none; }
+  :root:not([data-theme="light"]) .login-wave.on-dark { display: block; opacity: .10; }
+}
+:root[data-theme="dark"] .login-wave.on-light { display: none; }
+:root[data-theme="dark"] .login-wave.on-dark { display: block; opacity: .10; }
+.login { position: relative; }   /* above the wave; NOT `.login-wrap > *`, which has the same specificity as .login-wave and would cancel its position: absolute */
 .login { width: min(420px, 100%); }
 .receipt-img { max-width: 100%; border-radius: var(--tt-r-md); border: 1px solid var(--tt-border); background: var(--tt-surface-2); }
 .chat { display: flex; flex-direction: column; gap: 6px; max-height: 520px; overflow: auto; padding: var(--tt-s2); }

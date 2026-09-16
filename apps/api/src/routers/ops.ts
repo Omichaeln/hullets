@@ -66,7 +66,7 @@ export const readinessRouter = router({
   }),
 });
 export const publicRouter = router({
-  config: publicProcedure.query(async ({ ctx }) => ({ environment: ctx.app.environment, transport: ctx.app.transport.mode, sampleData: !!(await ctx.app.campaigns.setting("sample_data", null)), productName: "Hullets Promotions" })),
+  config: publicProcedure.query(async ({ ctx }) => ({ environment: ctx.app.environment, transport: ctx.app.transport.mode, sampleData: !!(await ctx.app.campaigns.setting("sample_data", null)), productName: "Huletts Promotions" })),
   winners: publicProcedure.input(z.object({ campaignId: z.string().optional(), period: z.string().optional() })).query(async ({ ctx, input }) => { const c = input.campaignId ? await ctx.app.campaigns.get(input.campaignId) : await ctx.app.campaigns.current(); if (!c) return { campaign: null, periods: [], winners: [] }; return { campaign: { code: c.code, name: c.name }, periods: await ctx.app.winners.publishedPeriods(c.id), winners: await ctx.app.winners.listPublic(c.id, input.period ?? null) }; }),
 });
 export const simulatorRouter = router({
