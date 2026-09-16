@@ -16,7 +16,7 @@ import { authFetch } from "../lib/trpc.ts";
  *  - box-sizing: content-box, because the global border-box rule makes padding eat the element's
  *    height and renders the clear space by shrinking the logo into a smudge.
  */
-const CLEAR_SPACE = { horizontal: 0.78, vertical: 0.42 } as const;
+const CLEAR_SPACE = { horizontal: 0.78, vertical: 0.42, icon: 1 } as const;
 export function Brand({ lockup = "horizontal", height = 28, className }: { lockup?: keyof typeof CLEAR_SPACE; height?: number; className?: string }) {
   const pad = Math.round(height * CLEAR_SPACE[lockup] * 0.5);
   const style = { height, padding: pad } as const;
@@ -24,6 +24,24 @@ export function Brand({ lockup = "horizontal", height = 28, className }: { locku
     <img className="on-light" src={`/brand/huletts-${lockup}.svg`} style={style} alt="Huletts" />
     <img className="on-dark" src={`/brand/huletts-${lockup}-reverse.svg`} style={style} alt="" aria-hidden="true" />
   </span>;
+}
+/**
+ * A small popover menu: click-outside and Escape close it, and choosing a link or
+ * a `.tt-menu-item` button closes it too. Used for the person in the topbar.
+ */
+export function Menu({ label, children, align = "right", className }: { label: ReactNode; children: ReactNode; align?: "left" | "right"; className?: string }) {
+  const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc); document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  return <div className={`tt-menu ${className ?? ""}`} ref={ref}>
+    <button type="button" className="tt-menu-trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{label}</button>
+    {open && <div className={`tt-menu-pop ${align}`} role="menu" onClick={(e) => { if ((e.target as HTMLElement).closest("a.tt-menu-item, button.tt-menu-item:not(.static)")) setOpen(false); }}>{children}</div>}
+  </div>;
 }
 export function PageHead({ title, sub, actions }: { title: ReactNode; sub?: ReactNode; actions?: ReactNode }) { return <div className="tt-page-head"><div><h1>{title}</h1>{sub && <div className="sub">{sub}</div>}</div>{actions && <div className="actions">{actions}</div>}</div>; }
 export function Card({ title, actions, children, flush, className }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; flush?: boolean; className?: string }) { return <section className={`tt-card ${className ?? ""}`}>{(title || actions) && <div className="head">{typeof title === "string" ? <h2>{title}</h2> : title}{actions && <div className="actions">{actions}</div>}</div>}<div className={`body ${flush ? "flush" : ""}`}>{children}</div></section>; }

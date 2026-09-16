@@ -58,3 +58,45 @@ describe("console routing", () => {
     expect(app).not.toMatch(/localStorage[^\n]*console|localStorage[^\n]*desk["']?\s*\)\s*===/);
   });
 });
+
+describe("console information architecture", () => {
+  const css = fs.readFileSync(path.join(ROOT, "apps/console/src/styles/taptap.css"), "utf8");
+  const nav = app.slice(app.indexOf("const NAV"), app.indexOf("function Shell("));
+
+  it("personal settings are on the person, not in the product's navigation", () => {
+    // "My account" used to sit in the sidebar between the audit log and the
+    // readiness report. It belongs on the user menu with the theme and sign-out.
+    expect(nav).not.toContain('"/account"');
+    expect(app).toMatch(/<Menu[\s\S]*to="\/account"/);
+    expect(app).toMatch(/Sign out/);
+  });
+
+  it("settings are separate from the work and from the technical logs", () => {
+    expect(nav).toMatch(/group: "Administer"[\s\S]*"\/settings"/);
+    expect(nav).toMatch(/group: "System"[\s\S]*"\/ops"[\s\S]*"\/audit"/);
+    expect(app).toContain('path === "/settings"');
+    // ...and the observability page no longer hides a settings editor in a tab.
+    const ops = fs.readFileSync(path.join(ROOT, "apps/console/src/pages/ops.tsx"), "utf8");
+    expect(ops).not.toContain("Settings & evidence");
+    expect(ops).not.toMatch(/title="Settings"/);
+    expect(fs.existsSync(path.join(ROOT, "apps/console/src/pages/settings.tsx"))).toBe(true);
+  });
+
+  it("the sidebar has a real collapse and the mobile controls cannot leak onto desktop", () => {
+    // One attribute drives both modes so they cannot drift apart.
+    expect(css).toContain('.tt-shell[data-collapsed="true"] { grid-template-columns: 64px 1fr; }');
+    expect(app).toContain("data-collapsed=");
+    // The old mobile-only hamburger was visible on every desktop: `.tt-menu-btn {display:none}`
+    // and `.btn {display:inline-flex}` had equal specificity and .btn was declared later.
+    expect(css).toContain(".tt-shell .tt-menu-btn { display: none; }");
+    expect(css).not.toMatch(/^\.tt-menu-btn \{ display: none; \}/m);
+    // The scrim had no desktop rule and became the first grid child when opened.
+    expect(css).toContain(".tt-scrim { display: none; }");
+    expect(app).not.toContain('{open && <div className="tt-scrim"');
+  });
+
+  it("the placeholder teal square is gone", () => {
+    expect(css).not.toContain(".tt-brand .mark");
+    expect(app).not.toContain('<span className="mark">');
+  });
+});
