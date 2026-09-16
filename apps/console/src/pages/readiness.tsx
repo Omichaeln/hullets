@@ -1,8 +1,12 @@
-import { trpc } from "../lib/trpc.ts";
-import { PageHead, Card, KV, Loading, ErrorBox, Badge, Table, Callout } from "../ui/kit.tsx";
+import { useState } from "react";
+import { trpc, errorMessage } from "../lib/trpc.ts";
+import { useCan } from "../lib/auth.tsx";
+import { PageHead, Card, KV, Loading, ErrorBox, Badge, Table, Callout, Button, ActionDialog, useToast } from "../ui/kit.tsx";
 import { fmtDate } from "../lib/format.ts";
 export function ReadinessPage() {
-  const q = trpc.readiness.get.useQuery();
+  const q = trpc.readiness.get.useQuery(); const can = useCan(); const toast = useToast();
+  const record = trpc.ops.recordEvidence.useMutation({ onSuccess: () => q.refetch() });
+  const [recording, setRecording] = useState<string | null>(null);
   if (q.isLoading) return <Loading />; if (q.error) return <ErrorBox error={q.error} />; const r = q.data!;
   const lvl = r.levels as Record<string, boolean>; const level = lvl.production ? "Production" : lvl.integratedClientTesting ? "Integrated client testing" : "Locally testable";
   return <>
@@ -18,7 +22,11 @@ export function ReadinessPage() {
         <Table rows={r.openDecisions} keyOf={(d) => d.id} cols={[{ h: "ID", c: (d) => d.id }, { h: "Question", c: (d) => d.question }, { h: "Test value in use", c: (d) => d.testValue ?? "–" }]} empty="No open blocking decisions" />
       </Card>
       <Card title="Evidence recorded">
-        <Table rows={r.evidence} keyOf={(e) => e.kind} cols={[{ h: "Kind", c: (e) => e.kind }, { h: "Recorded", c: (e) => e.value ? fmtDate((e.value as { at?: string }).at) : <Badge tone="warning">missing</Badge> }, { h: "Detail", c: (e) => e.value ? <span className="small mono wrap">{JSON.stringify(e.value).slice(0, 200)}</span> : "–" }]} />
+        <Table rows={r.evidence} keyOf={(e) => e.kind} cols={[{ h: "Kind", c: (e) => e.kind }, { h: "Recorded", c: (e) => e.value ? fmtDate((e.value as { at?: string }).at) : <Badge tone="warning">missing</Badge> }, { h: "Detail", c: (e) => e.value ? <span className="small mono wrap">{JSON.stringify(e.value).slice(0, 200)}</span> : "–" }, ...(can("evidence.record") ? [{ h: "", c: (e: { kind: string; value: unknown }) => <Button size="sm" onClick={() => setRecording(e.kind)}>{e.value ? "Re-record" : "Record"}</Button> }] : [])]} />
+        {recording && <ActionDialog title={`Record evidence: ${recording}`} description="Records that this piece of evidence exists and was accepted. Give a reference an auditor can follow — a path, a link or a ticket. It feeds the activation validator." confirmLabel="Record"
+          fields={[{ key: "reference", label: "Reference to the evidence", required: true, placeholder: "docs/testing/evidence/… or a ticket" }]}
+          onClose={() => setRecording(null)}
+          onConfirm={async (v) => { try { await record.mutateAsync({ kind: recording as "receipt_benchmark_accepted", detail: { reference: v.reference } }); toast.push("Recorded", "success"); setRecording(null); } catch (e) { toast.push(errorMessage(e), "error"); throw e; } }} />}
       </Card>
       {r.activation && <Card title={<h2>Production activation validator {r.activation.ok ? <Badge tone="success">would pass</Badge> : <Badge tone="danger">{r.activation.failures.filter((f) => f.blocking).length} blocking</Badge>}</h2>}>
         <Table rows={r.activation.failures} keyOf={(f) => f.code} cols={[{ h: "Code", c: (f) => <span className="mono">{f.code}</span> }, { h: "Finding", c: (f) => f.message }, { h: "Blocks", c: (f) => f.blocking ? <Badge tone="danger">yes</Badge> : <Badge>advisory</Badge> }]} empty="No findings" />

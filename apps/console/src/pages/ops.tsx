@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { trpc, errorMessage, downloadAuth } from "../lib/trpc.ts";
 import { useCan } from "../lib/auth.tsx";
-import { PageHead, Card, Table, Badge, Button, Loading, ErrorBox, Tabs, KV, Select, Json, Input, Callout, useToast } from "../ui/kit.tsx";
+import { PageHead, Card, Table, Badge, Button, Loading, ErrorBox, Tabs, KV, Select, Json, Callout, useToast } from "../ui/kit.tsx";
 import { fmtDate, titleCase, ago } from "../lib/format.ts";
-type Tab = "health" | "queues" | "outbound" | "crm" | "alerts" | "exports" | "settings";
+type Tab = "health" | "queues" | "outbound" | "crm" | "alerts" | "exports";
 export function OpsPage() {
-  const [tab, setTab] = useState<Tab>("health"); const can = useCan();
+  const [tab, setTab] = useState<Tab>("health");
   return <>
     <PageHead title="Integrations & queues" sub="Provider modes are stated honestly; simulated or unconfigured providers are labelled." />
-    <Tabs tabs={[{ id: "health", label: "Health" }, { id: "queues", label: "Queues & dead letters" }, { id: "outbound", label: "Outbound messages" }, { id: "crm", label: "CRM sync" }, { id: "alerts", label: "Alerts" }, { id: "exports", label: "Exports" }, ...(can("settings.write") || can("evidence.record") ? [{ id: "settings" as Tab, label: "Settings & evidence" }] : [])]} value={tab} onChange={setTab} />
-    {tab === "health" && <Health />}{tab === "queues" && <Queues />}{tab === "outbound" && <Outbound />}{tab === "crm" && <Crm />}{tab === "alerts" && <Alerts />}{tab === "exports" && <Exports />}{tab === "settings" && <Settings />}
+    <Tabs tabs={[{ id: "health", label: "Health" }, { id: "queues", label: "Queues & dead letters" }, { id: "outbound", label: "Outbound messages" }, { id: "crm", label: "CRM sync" }, { id: "alerts", label: "Alerts" }, { id: "exports", label: "Exports" }]} value={tab} onChange={setTab} />
+    {tab === "health" && <Health />}{tab === "queues" && <Queues />}{tab === "outbound" && <Outbound />}{tab === "crm" && <Crm />}{tab === "alerts" && <Alerts />}{tab === "exports" && <Exports />}
   </>;
 }
 function Health() {
@@ -62,11 +62,4 @@ function Exports() {
     <div className="tt-row">{["submissions", "entries", "winners", "participants", "outlets"].map((s) => <Button key={s} loading={busy === s} onClick={async () => { setBusy(s); try { await downloadAuth(`/api/export/${s}.csv${cid ? `?campaignId=${cid}` : ""}`, `${s}.csv`); } catch (e) { toast.push(errorMessage(e), "error"); } finally { setBusy(null); } }}>{titleCase(s)}</Button>)}</div>
     <p className="small muted" style={{ marginTop: 8 }}>Identity numbers and full phone numbers are never exported.</p>
   </Card>;
-}
-function Settings() {
-  const can = useCan(); const toast = useToast(); const [key, setKey] = useState("review.sla_hours"); const q = trpc.ops.setting.useQuery({ key }, { enabled: /^[a-z0-9_.:-]{1,80}$/.test(key) }); const set = trpc.ops.setSetting.useMutation({ onSuccess: () => q.refetch() }); const [val, setVal] = useState(""); const record = trpc.ops.recordEvidence.useMutation(); const readiness = trpc.readiness.get.useQuery();
-  return <div className="tt-grid c2">
-    {can("settings.write") && <Card title="Settings"><div className="tt-col"><Input value={key} onChange={(e) => setKey(e.target.value)} mono placeholder="setting key" /><div className="small muted">Current: <span className="mono">{JSON.stringify(q.data ?? null)}</span></div><Input value={val} onChange={(e) => setVal(e.target.value)} mono placeholder='new value (JSON, e.g. 24 or "text")' /><div><Button variant="primary" loading={set.isPending} onClick={async () => { try { await set.mutateAsync({ key, value: JSON.parse(val) }); toast.push("Saved", "success"); } catch (e) { toast.push(errorMessage(e), "error"); } }}>Save</Button></div></div></Card>}
-    {can("evidence.record") && <Card title="Record readiness evidence"><p className="small muted">Records that a piece of evidence exists and was accepted (link to the artefact). Feeds the activation validator.</p><div className="tt-col">{(["receipt_benchmark_accepted", "restore_rehearsal", "load_benchmark", "client_uat_signoff"] as const).map((k) => { const v = readiness.data?.evidence.find((e) => e.kind === k)?.value as { at?: string } | null | undefined; return <div key={k} className="tt-row"><span className="mono" style={{ minWidth: 240 }}>{k}</span>{v ? <Badge tone="success">recorded {fmtDate(v.at)}</Badge> : <Badge tone="warning">missing</Badge>}<Button size="sm" onClick={async () => { const ref = prompt("Reference to the evidence (path, link or ticket):"); if (ref == null) return; try { await record.mutateAsync({ kind: k, detail: { reference: ref } }); readiness.refetch(); toast.push("Recorded", "success"); } catch (e) { toast.push(errorMessage(e), "error"); } }}>Record</Button></div>; })}</div></Card>}
-  </div>;
 }
