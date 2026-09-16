@@ -64,8 +64,26 @@ const TECHNICAL_ROLES = ["campaign_manager", "reviewer", "draw_officer", "draw_a
 function Routes() {
   const full = usePath(); const path = full.split("?")[0]; const { me } = useMe();
   const [forceFull, setForceFull] = useState(false);
+  // A temporary password must be changed before anything else is reachable.
+  //
+  // This redirect HAS to happen in an effect rather than during render. navigate()
+  // dispatches `tt:navigate` synchronously, and on the very first render usePath's
+  // addEventListener effect has not run yet — so the event reached no listener, the
+  // URL changed, the component returned null, and nothing ever re-rendered. Every
+  // staff member's first sign-in, with the temporary password they were issued,
+  // landed on a permanently blank console. It only looked fine when /account was
+  // opened directly, because then the guard never fired.
+  const needsPasswordChange = !!me?.mustChangePassword;
+  const onAccount = path === "/account";
+  useEffect(() => { if (needsPasswordChange && !onAccount) navigate("/account?mustChange=1", { replace: true }); }, [needsPasswordChange, onAccount]);
   if (!me) return <LoginPage />;
-  if (me.mustChangePassword && path !== "/account") { navigate("/account?mustChange=1", { replace: true }); return null; }
+  // The password gate outranks console selection, and is keyed on the FLAG rather
+  // than on the path: keying it on `path !== "/account"` made it go false the
+  // moment the redirect landed, so a promotion user fell straight through to the
+  // desk and every one of its queries failed with PASSWORD_CHANGE_REQUIRED.
+  // Rendered immediately rather than waiting for the effect, so there is no blank
+  // frame even for one paint.
+  if (needsPasswordChange) return <Shell><AccountPage /></Shell>;
   // Which console a person gets is decided by the roles on their account, not by
   // a setting they could lose. Someone who ALSO holds a technical role (a
   // platform engineer sitting with the client, say) can switch to the full
