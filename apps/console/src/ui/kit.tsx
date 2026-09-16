@@ -1,6 +1,30 @@
 import { useEffect, useState, useId, isValidElement, cloneElement, type ReactNode, createContext, useContext, useCallback, useRef } from "react";
 import { STATUS_TONE, titleCase } from "../lib/format.ts";
 import { authFetch } from "../lib/trpc.ts";
+/**
+ * The Huletts lock-up. Four rules from the brand guidelines are enforced here rather than left to
+ * whoever writes the next screen:
+ *
+ *  - All three elements travel together. The H icon, "Est. 1892" and the wordmark are ONE lock-up.
+ *    This component only ever renders a complete one; there is deliberately no way to ask it for a
+ *    wordmark on its own.
+ *  - Clear space is the height of the H icon. That ratio differs between the two lock-ups, so it is
+ *    measured from the artwork and applied as padding, which holds at any size.
+ *  - The mark is never restyled. It ships as artwork, so there is nothing for CSS to stretch,
+ *    recolour or shadow. The reverse is a SEPARATE FILE, not a filter — which is why both are
+ *    rendered and CSS picks one, rather than inverting the colour one.
+ *  - box-sizing: content-box, because the global border-box rule makes padding eat the element's
+ *    height and renders the clear space by shrinking the logo into a smudge.
+ */
+const CLEAR_SPACE = { horizontal: 0.78, vertical: 0.42 } as const;
+export function Brand({ lockup = "horizontal", height = 28, className }: { lockup?: keyof typeof CLEAR_SPACE; height?: number; className?: string }) {
+  const pad = Math.round(height * CLEAR_SPACE[lockup] * 0.5);
+  const style = { height, padding: pad } as const;
+  return <span className={`brand-mark ${className ?? ""}`}>
+    <img className="on-light" src={`/brand/huletts-${lockup}.svg`} style={style} alt="Huletts" />
+    <img className="on-dark" src={`/brand/huletts-${lockup}-reverse.svg`} style={style} alt="" aria-hidden="true" />
+  </span>;
+}
 export function PageHead({ title, sub, actions }: { title: ReactNode; sub?: ReactNode; actions?: ReactNode }) { return <div className="tt-page-head"><div><h1>{title}</h1>{sub && <div className="sub">{sub}</div>}</div>{actions && <div className="actions">{actions}</div>}</div>; }
 export function Card({ title, actions, children, flush, className }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; flush?: boolean; className?: string }) { return <section className={`tt-card ${className ?? ""}`}>{(title || actions) && <div className="head">{typeof title === "string" ? <h2>{title}</h2> : title}{actions && <div className="actions">{actions}</div>}</div>}<div className={`body ${flush ? "flush" : ""}`}>{children}</div></section>; }
 export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) { return <div className="tt-card tt-stat"><div className="label">{label}</div><div className="value">{value}</div>{hint && <div className="hint">{hint}</div>}</div>; }
