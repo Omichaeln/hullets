@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "description" text DEFAULT '' NOT NULL;

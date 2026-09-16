@@ -21,23 +21,23 @@ export class CampaignService {
   async byCode(code: string) { const [c] = await this.db.select().from(campaigns).where(eq(campaigns.code, code)); return c ?? null; }
   /** The campaign consumers currently talk to: active first, then paused, then the most recent closed (winners browsing). */
   async current() { const rows = await this.db.select().from(campaigns).where(inArray(campaigns.status, ["active", "paused", "closed"])); const rank: Record<string, number> = { active: 0, paused: 1, closed: 2 }; return rows.sort((a, b) => rank[a.status] - rank[b.status] || (b.createdAt < a.createdAt ? -1 : 1))[0] ?? null; }
-  async create(input: { code: string; name: string; startsAt: string; endsAt: string; timezone?: string; sample?: boolean; rules?: unknown; content?: unknown; flags?: unknown; prizePlan?: unknown }, actorId: string) {
+  async create(input: { code: string; name: string; description?: string; startsAt: string; endsAt: string; timezone?: string; sample?: boolean; rules?: unknown; content?: unknown; flags?: unknown; prizePlan?: unknown }, actorId: string) {
     if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(input.code)) throw invalid("code must be 3–40 characters: A-Z, 0-9, dashes");
     if (Number.isNaN(Date.parse(input.startsAt)) || Number.isNaN(Date.parse(input.endsAt)) || Date.parse(input.endsAt) <= Date.parse(input.startsAt)) throw invalid("startsAt/endsAt must be ISO-8601 with endsAt after startsAt");
     if (await this.byCode(input.code)) throw conflict(`campaign code ${input.code} already exists`);
     const id = newId("cmp");
     return this.db.transaction(async (tx) => {
-      await tx.insert(campaigns).values({ id, code: input.code, name: input.name || input.code, startsAt: input.startsAt, endsAt: input.endsAt, timezone: input.timezone || "Africa/Harare", sample: !!input.sample, createdBy: actorId });
+      await tx.insert(campaigns).values({ id, code: input.code, name: input.name || input.code, description: input.description ?? "", startsAt: input.startsAt, endsAt: input.endsAt, timezone: input.timezone || "Africa/Harare", sample: !!input.sample, createdBy: actorId });
       await tx.insert(campaignControls).values({ campaignId: id, updatedBy: actorId });
       const vid = await this.createVersionIn(tx, id, { rules: input.rules, content: input.content, flags: input.flags, prizePlan: input.prizePlan }, actorId);
       await this.audit.record(tx, { actorType: "staff", actorId, action: "campaign.create", targetType: "campaign", targetId: id, campaignId: id, payload: { code: input.code } });
       return { campaign: (await tx.select().from(campaigns).where(eq(campaigns.id, id)))[0], draftVersionId: vid };
     });
   }
-  async update(id: string, patch: { name?: string; startsAt?: string; endsAt?: string; timezone?: string }, actorId: string) {
+  async update(id: string, patch: { name?: string; description?: string; startsAt?: string; endsAt?: string; timezone?: string }, actorId: string) {
     const c = await this.get(id); if (!c) throw notFound("campaign");
     if (["closed", "archived"].includes(c.status)) throw conflict(`campaign is ${c.status}`);
-    const next = { name: patch.name ?? c.name, startsAt: patch.startsAt ?? c.startsAt, endsAt: patch.endsAt ?? c.endsAt, timezone: patch.timezone ?? c.timezone };
+    const next = { name: patch.name ?? c.name, description: patch.description ?? c.description, startsAt: patch.startsAt ?? c.startsAt, endsAt: patch.endsAt ?? c.endsAt, timezone: patch.timezone ?? c.timezone };
     if (Date.parse(next.endsAt) <= Date.parse(next.startsAt)) throw invalid("endsAt must be after startsAt");
     await this.db.update(campaigns).set({ ...next, updatedAt: new Date().toISOString() }).where(eq(campaigns.id, id));
     await this.audit.record(this.db, { actorType: "staff", actorId, action: "campaign.update", targetType: "campaign", targetId: id, campaignId: id, payload: patch });
@@ -54,7 +54,7 @@ export class CampaignService {
   async clone(id: string, { code, name }: { code: string; name?: string }, actorId: string) {
     const src = await this.get(id); if (!src) throw notFound("campaign");
     const v = (await this.activeVersion(id)) ?? (await this.versions(id)).at(-1);
-    const out = await this.create({ code, name: name || `${src.name} (copy)`, startsAt: src.startsAt, endsAt: src.endsAt, timezone: src.timezone, sample: src.sample, rules: v?.rules, content: v?.content, flags: v?.flags, prizePlan: v?.prizePlan }, actorId);
+    const out = await this.create({ code, name: name || `${src.name} (copy)`, description: src.description, startsAt: src.startsAt, endsAt: src.endsAt, timezone: src.timezone, sample: src.sample, rules: v?.rules, content: v?.content, flags: v?.flags, prizePlan: v?.prizePlan }, actorId);
     const members = await this.db.select().from(campaignOutlets).where(eq(campaignOutlets.campaignId, id));
     if (members.length) await this.db.insert(campaignOutlets).values(members.map((m) => ({ ...m, campaignId: out.campaign.id })));
     const decisions = await this.listDecisions(id);

@@ -1,6 +1,8 @@
+import type { inferRouterOutputs } from "@trpc/server";
 import { createTRPCReact, httpBatchLink } from "@trpc/react-query";
 import type { AppRouter } from "../../../api/src/router.ts";
 export const trpc = createTRPCReact<AppRouter>();
+export type RouterOutputs = inferRouterOutputs<AppRouter>;
 const KEY = "hullets.token";
 export const session = {
   get token() { try { return localStorage.getItem(KEY); } catch { return null; } },

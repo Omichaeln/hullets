@@ -18,7 +18,11 @@ export async function validateActivation(d: { cfg: Config; environment: string; 
   const prod = d.environment === "production"; const f: Failure[] = [];
   const fail = (code: string, message: string, always = false) => f.push({ code, message, blocking: always || prod });
   const c = await d.campaigns.get(d.campaignId); if (!c) return { ok: false, environment: d.environment, failures: [{ code: "CAMPAIGN_NOT_FOUND", message: "campaign not found", blocking: true }], blockingCount: 1 };
-  const v = await d.campaigns.activeVersion(d.campaignId); if (!v) fail("NO_ACTIVE_VERSION", "no activated campaign version");
+  // Judge the configuration that WOULD be live: the active version, or — while the
+  // campaign is still being set up — its latest draft, so the set-up flow can say
+  // what is missing before anything is activated. NO_ACTIVE_VERSION still fails.
+  const active = await d.campaigns.activeVersion(d.campaignId); if (!active) fail("NO_ACTIVE_VERSION", "no activated campaign version");
+  const v = active ?? [...(await d.campaigns.versions(d.campaignId))].reverse().find((x) => x.status === "draft") ?? null;
   const rules = d.campaigns.rulesOf(v), content = d.campaigns.contentOf(v), plan = d.campaigns.planOf(v);
   const decisions = await d.campaigns.listDecisions(d.campaignId);
   for (const id of DECISION_IDS) { const row = decisions.find((x) => x.decisionId === id); if (!row) fail(`DECISION_MISSING_${id}`, `${id} is not in the register`); else if (row.blocksActivation && !["approved", "not_required"].includes(row.status)) fail(`DECISION_OPEN_${id}`, `${id} (${row.question}) is ${row.status}`); else if (row.status === "approved" && !row.approvedValue) fail(`DECISION_NO_VALUE_${id}`, `${id} approved without a value`); }

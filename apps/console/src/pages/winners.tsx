@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc, errorMessage } from "../lib/trpc.ts";
-import { useCan } from "../lib/auth.tsx";
+import { Restricted, useCan } from "../lib/auth.tsx";
 import { Link, navigate } from "../lib/router.tsx";
 import { PageHead, Card, Table, Badge, Button, Loading, ErrorBox, Select, KV, ActionDialog, Callout, useToast } from "../ui/kit.tsx";
 import { fmtDate, titleCase } from "../lib/format.ts";
@@ -27,6 +27,7 @@ export function WinnerDetailPage({ id }: { id: string }) {
       {manage && ["accepted", "verified", "collected"].includes(w.status) && <Button onClick={() => setDialog({ kind: "reassign" })}>Collection outlet</Button>}
       {can("winner.publish") && w.publication !== "published" && ["verified", "accepted", "collected"].includes(w.status) && <Button onClick={async () => { try { await publish.mutateAsync({ winnerId: id }); toast.push("Published (masked name only)", "success"); } catch (e) { toast.push(errorMessage(e), "error"); } }}>Publish</Button>}
       {can("winner.publish") && w.publication === "published" && <Button onClick={() => setDialog({ kind: "unpublish" })}>Withdraw publication</Button>}
+      {!manage && <Restricted perm="winner.manage" action="Contacting, verifying or recording this winner" />}
     </>} />
     {claimRef && <Callout tone="success">Claim reference sent to the winner: <span className="mono strong">{claimRef}</span>. It is stored hashed; note it now if you need it for the collection point.</Callout>}
     <div className="tt-grid c2" style={{ marginTop: 16 }}>

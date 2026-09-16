@@ -9,20 +9,90 @@ underneath is called.
 
 | Group | Who, when | Destinations |
 |---|---|---|
-| **Run** | Operators, every day | Overview · Submissions & review · Entries · Participants · Support |
+| **Run** | Operators, every day | Dashboard · Submissions & review · Entries · Participants · Support |
 | **Draws** | The draw officer and approver, once a period, under separation of duties | Draws · Winners & claims |
 | **Set up** | The campaign manager, before launch and between waves | Campaigns · Outlets & products · Simulator |
 | **Administer** | The platform administrator, occasionally | Access · Settings |
 | **System** | An engineer checking the installation is healthy | Integrations & queues · Audit log · Readiness |
 
 A group only appears if the person holds a permission for at least one item in it, so a reviewer
-never sees Administer and a platform administrator never sees Run — that is the policy in
-`packages/core/src/auth/policy.ts` doing its job, not a gap.
+never sees Administer — that is the policy in `packages/core/src/auth/policy.ts` doing its job,
+not a gap.
+
+## Who sees what: read-wide, act-narrow
+
+Every platform role — the platform administrator included — can **see** the whole promotion:
+the campaigns and their configuration, participants, submissions, entries, draws, winners and the
+reports. A person who cannot see the campaign cannot understand the system they are asked to run,
+review, draw or administer. What each role can **do** stays narrow and is what the policy protects:
+
+| Doing | Role |
+|---|---|
+| Create, configure and activate a campaign; pause switches | Campaign manager |
+| Decide a receipt; see receipt images | Reviewer (images: also the auditor) |
+| Freeze and execute a draw | Draw officer |
+| Approve or reject a draw (never the same person who ran it) | Draw approver |
+| Contact, verify and record winners; publish results | Fulfilment |
+| Unmask a national identity number (audited) | Fulfilment, auditor |
+| Exports; verify the audit chain | Auditor |
+| Accounts, settings, integrations | Platform administrator |
+
+Where a control is missing from a page, the page says what it would take (for example *Approving
+this draw needs the Draw approver role*) rather than leaving a gap. The client's promotion desk
+roles are unchanged: they see the desk and nothing of the draw machinery.
+
+## The dashboard
+
+`/` is the campaign dashboard for every platform user. It is about **one** campaign — the live one,
+else the one being set up — and answers the first questions on signing in: which promotion, is it
+live, how is it doing, where do I go to work on it. It carries shortcuts to the campaign's set-up,
+submissions, entries, participants, draws, winners and support; the reconciled metrics; the review
+queue and open alerts. A draft campaign gets a "before this can go live" card that counts what is
+still missing. With no campaign at all the page says so and puts **Create campaign** in the middle
+of the screen (with the reason it is absent for anyone who is not a campaign manager).
+
+Direct links are honoured: a person who opens `/draws/…` and signs in lands on that draw. The one
+redirect the console owns is the temporary-password gate.
+
+## Campaigns and set-up
+
+**Campaigns** lists every campaign; **Create campaign** (`/campaigns/new`) takes a name, a code
+suggested from it, an internal description, the window and the time zone, and lands in the set-up
+flow. A campaign page (`/campaigns/:id?s=…`) is one section at a time:
+
+| Section | Edits | Where it lives |
+|---|---|---|
+| Basics | name, description, window, time zone; status via the button | `campaigns` row |
+| Products & qualification | products, aliases, pack sizes, threshold, entries per receipt | version `rules` |
+| Entry rules | caps, eligibility, purchase window, outlet match, reader thresholds | version `rules` |
+| Registration & receipts | identity stage, location mode, "my entries", date order | version `flags`, `rules.dateOrder` |
+| Terms & messages | terms/privacy versions and link, prizes copy, artwork, winner template, message overrides | version `content` |
+| Prizes & draws | prize tiers, stand-bys, claim days; draw periods | version `prizePlan`; `campaign_periods` |
+| Participating outlets | membership, collection points, CSV import | `campaign_outlets` |
+| Team & controls | who holds which role (platform-wide); pause switches | accounts; `campaign_controls` |
+| Client decisions | the decision register | `campaign_decisions` |
+| Readiness & activation | the validator, in words, with a Fix link per item; activate the draft; go live | — |
+
+The protections are the server's and hold throughout: an **active** version is immutable, so a
+save on a live campaign opens a **draft** version and says so (participants keep the live one until
+the draft is activated under Readiness); a drawn period cannot change; a closed campaign cannot
+change; going live is `campaign.activate` and in production runs the validator first. Everyone
+else sees the same sections read-only, with the role that could edit them named at the foot.
+
+Readiness judges the configuration that *would* be live — the active version, or the latest draft
+while nothing is active — so a campaign being set up sees its own gaps rather than the gaps of a
+version that does not exist.
+
+What does not exist, stated so nobody looks for it: **per-campaign team membership** (roles are
+held on the account and apply to every campaign) and **per-campaign branding** beyond the
+participant-facing name, prize artwork and message wording.
 
 **The person's own things are not navigation.** Account, password, two-step verification, theme and
-sign-out are about the person, not the product, so they live on the person: the name and role in the
-top-right open a menu. "My account" used to sit in the sidebar between the audit log and the
-readiness report.
+sign-out are about the person, not the product, so they live on the person: the compact control in
+the top-right — initials, the name (clipped, never wrapped; hidden on a phone), a chevron — opens
+a menu that states the person's name, e-mail and roles **once**, then My account, the theme and
+Sign out. "My account" used to sit in the sidebar between the audit log and the readiness report,
+and the roles used to be printed in the header as well as the menu.
 
 ## The sidebar
 

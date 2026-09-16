@@ -106,6 +106,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tt-main { min-width: 0; }
 .tt-topbar { display: flex; align-items: center; gap: var(--tt-s3); padding: var(--tt-s3) var(--tt-s6); border-bottom: 1px solid var(--tt-border); background: var(--tt-surface); position: sticky; top: 0; z-index: 5; }
 .tt-topbar .spacer { flex: 1; }
+/* Status pills give way before the account control does: they clip, it never leaves the screen. */
+.tt-topbar > .badge { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tt-topbar > .tt-env, .tt-topbar > .tt-menu, .tt-topbar > .tt-menu-btn { flex-shrink: 0; }
 .tt-content { padding: var(--tt-s6); max-width: 1440px; }
 .tt-env { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--tt-warning-soft); color: var(--tt-warning); }
 .tt-env.production { background: var(--tt-danger-soft); color: var(--tt-danger-text); }
@@ -159,14 +162,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tt-page-head .actions { margin-left: auto; display: flex; gap: var(--tt-s2); flex-wrap: wrap; }
 .tt-grid { display: grid; gap: var(--tt-s4); } .tt-grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tt-grid.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tt-grid.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 1100px) { .tt-grid.c4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tt-grid.c3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 700px) { .tt-grid.c2, .tt-grid.c3, .tt-grid.c4 { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .tt-grid, .tt-grid.c2, .tt-grid.c3, .tt-grid.c4 { grid-template-columns: 1fr !important; } }
 .tt-row { display: flex; gap: var(--tt-s2); align-items: center; flex-wrap: wrap; } .tt-col { display: flex; flex-direction: column; gap: var(--tt-s3); }
 .tt-stack > * + * { margin-top: var(--tt-s4); }
 .muted { color: var(--tt-text-3); } .small { font-size: 12px; } .strong { font-weight: 600; } .right { text-align: right; } .nowrap { white-space: nowrap; } .wrap { overflow-wrap: anywhere; }
 
 /* Cards */
 .tt-card { background: var(--tt-surface); border: 1px solid var(--tt-border); border-radius: var(--tt-r-lg); box-shadow: var(--tt-sh-1); }
-.tt-card > .head { display: flex; align-items: center; gap: var(--tt-s3); padding: var(--tt-s3) var(--tt-s4); border-bottom: 1px solid var(--tt-border); } .tt-card > .head .actions { margin-left: auto; display: flex; gap: var(--tt-s2); }
+.tt-card > .head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--tt-s3); padding: var(--tt-s3) var(--tt-s4); border-bottom: 1px solid var(--tt-border); } .tt-card > .head .actions { margin-left: auto; display: flex; gap: var(--tt-s2); }
 .tt-card > .body { padding: var(--tt-s4); } .tt-card > .body.flush { padding: 0; }
 .tt-stat { padding: var(--tt-s4); } .tt-stat .label { font-size: 12px; color: var(--tt-text-3); font-weight: 500; } .tt-stat .value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; } .tt-stat .hint { font-size: 12px; color: var(--tt-text-3); margin-top: 2px; }
 
@@ -294,14 +297,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
    product's navigation. "My account" used to sit in the sidebar between the audit
    log and the readiness report. */
 .tt-menu { position: relative; }
-.tt-menu-trigger { display: inline-flex; align-items: center; gap: var(--tt-s2); padding: 4px 6px 4px 4px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--tt-text); cursor: pointer; font: inherit; }
+/* The trigger is a compact identifier: initials, the name (clipped, never wrapped),
+   a chevron. Roles are NOT repeated here — they are said once, in the menu head. */
+.tt-menu-trigger { display: inline-flex; align-items: center; gap: var(--tt-s2); padding: 3px 8px 3px 3px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--tt-text); cursor: pointer; font: inherit; max-width: 240px; }
 .tt-menu-trigger:hover, .tt-menu-trigger[aria-expanded="true"] { background: var(--tt-surface-2); border-color: var(--tt-border); }
-.tt-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--tt-primary); color: var(--tt-on-primary); display: grid; place-items: center; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
-.tt-user-name { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; text-align: left; }
-.tt-user-name small { color: var(--tt-text-3); font-size: 11px; }
-.tt-menu-pop { position: absolute; top: calc(100% + 6px); min-width: 240px; background: var(--tt-surface); border: 1px solid var(--tt-border); border-radius: var(--tt-r-lg); box-shadow: var(--tt-sh-3); padding: var(--tt-s2); z-index: 30; }
+.tt-menu-trigger:focus-visible { outline: none; box-shadow: var(--tt-focus); border-color: var(--tt-primary); }
+.tt-user { display: inline-flex; align-items: center; gap: var(--tt-s2); min-width: 0; }
+.tt-avatar { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%; background: var(--tt-primary); color: var(--tt-on-primary); display: grid; place-items: center; font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.tt-user-name { display: block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; line-height: 1.2; }
+.tt-user-chevron { width: 14px; height: 14px; flex: 0 0 14px; color: var(--tt-text-3); }
+.tt-menu-pop { position: absolute; top: calc(100% + 6px); min-width: 240px; max-width: min(320px, calc(100vw - 24px)); background: var(--tt-surface); border: 1px solid var(--tt-border); border-radius: var(--tt-r-lg); box-shadow: var(--tt-sh-3); padding: var(--tt-s2); z-index: 30; }
 .tt-menu-pop.right { right: 0; } .tt-menu-pop.left { left: 0; }
 .tt-menu-head { padding: var(--tt-s2) var(--tt-s3) var(--tt-s3); border-bottom: 1px solid var(--tt-border); margin-bottom: var(--tt-s2); }
+.tt-menu-head strong { display: block; overflow-wrap: anywhere; }
+.tt-menu-roles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .tt-menu-item { display: flex; align-items: center; justify-content: space-between; gap: var(--tt-s3); width: 100%; padding: 8px var(--tt-s3); border-radius: var(--tt-r-md); border: none; background: none; color: var(--tt-text); font: inherit; text-align: left; cursor: pointer; text-decoration: none; }
 a.tt-menu-item:hover, button.tt-menu-item:hover { background: var(--tt-surface-2); text-decoration: none; }
 .tt-menu-item.static { cursor: default; } .tt-menu-item.static:hover { background: none; }
@@ -310,7 +319,60 @@ a.tt-menu-item:hover, button.tt-menu-item:hover { background: var(--tt-surface-2
 .tt-seg button { border: none; background: none; padding: 4px 9px; font-size: 12px; color: var(--tt-text-2); cursor: pointer; }
 .tt-seg button + button { border-left: 1px solid var(--tt-border); }
 .tt-seg button.on { background: var(--tt-primary-soft); color: var(--tt-on-primary-soft); font-weight: 600; }
-@media (max-width: 900px) { .tt-user-name { display: none; } }
+@media (max-width: 900px) { .tt-user-name { display: none; } .tt-menu-trigger { padding-right: 6px; } }
+
+/* ------------------------------------------------------------ restricted hint
+   A control that a person's role does not include is not silently missing: the
+   page says what it would take. Same type scale as field help text. */
+.tt-restricted { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--tt-text-3); }
+.tt-restricted svg { width: 13px; height: 13px; flex: 0 0 13px; opacity: .8; }
+
+/* ------------------------------------------------------------ campaign dashboard */
+.dash-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--tt-s3); }
+.dash-shortcuts { display: grid; gap: var(--tt-s3); grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.dash-shortcut { display: flex; flex-direction: column; gap: 2px; padding: var(--tt-s3) var(--tt-s4); border: 1px solid var(--tt-border); border-radius: var(--tt-r-md); background: var(--tt-surface); color: var(--tt-text); text-decoration: none; }
+.dash-shortcut:hover { border-color: var(--tt-primary); text-decoration: none; }
+.dash-shortcut strong { font-size: 14px; } .dash-shortcut span { font-size: 12px; color: var(--tt-text-3); }
+.dash-empty { padding: var(--tt-s8) var(--tt-s6); text-align: center; }
+.dash-empty h2 { margin: var(--tt-s3) 0 var(--tt-s2); } .dash-empty p { color: var(--tt-text-3); max-width: 46ch; margin: 0 auto var(--tt-s4); }
+.dash-empty .btn.lg { padding: 10px 18px; font-size: 14px; }
+
+/* ------------------------------------------------------------ campaign set-up
+   A section list on the left and one section at a time on the right, like a
+   settings page: eleven tabs in a row would not fit and would not scan. On a
+   phone the list becomes a scrolling row of chips above the section. */
+.setup { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--tt-s5); align-items: start; }
+.setup-nav { position: sticky; top: calc(var(--tt-s6) + 52px); display: flex; flex-direction: column; gap: 2px; }
+.setup-nav a { display: flex; flex-direction: column; padding: 7px var(--tt-s3); border-radius: var(--tt-r-md); color: var(--tt-text-2); text-decoration: none; font-weight: 500; font-size: 13px; }
+.setup-nav a small { font-size: 11px; color: var(--tt-text-3); font-weight: 400; }
+.setup-nav a:hover { background: var(--tt-surface-2); text-decoration: none; }
+.setup-nav a.active { background: var(--tt-primary-soft); color: var(--tt-on-primary-soft); font-weight: 600; }
+.setup-nav a.active small { color: inherit; opacity: .8; }
+.setup-nav a .badge { align-self: flex-start; margin-top: 2px; }
+.setup-nav .group { margin: var(--tt-s3) var(--tt-s3) var(--tt-s1); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--tt-text-3); }
+.setup-body { min-width: 0; }
+.setup-foot { display: flex; flex-wrap: wrap; gap: var(--tt-s2); align-items: center; margin-top: var(--tt-s4); padding-top: var(--tt-s4); border-top: 1px solid var(--tt-border); }
+.setup-foot .spacer { flex: 1; }
+.setup-version { display: flex; flex-wrap: wrap; gap: var(--tt-s2) var(--tt-s3); align-items: center; font-size: 13px; }
+.setup-rows { display: flex; flex-direction: column; gap: var(--tt-s2); }
+.setup-row { display: grid; gap: var(--tt-s2); grid-template-columns: 1fr 2fr 110px 2fr auto auto; align-items: end; padding: var(--tt-s2) 0; border-bottom: 1px dashed var(--tt-border); }
+.setup-row.tiers { grid-template-columns: 1fr 3fr 110px auto; }
+.setup-row.msg { grid-template-columns: 220px 1fr auto; align-items: start; }
+.setup-row .field > label { font-size: 11px; }
+.check-list { display: flex; flex-direction: column; gap: var(--tt-s2); }
+.check-item { display: grid; grid-template-columns: 22px 1fr auto; gap: var(--tt-s3); align-items: start; padding: var(--tt-s2) 0; border-bottom: 1px solid var(--tt-border); }
+.check-item:last-child { border-bottom: none; }
+.check-item .mark { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.check-item .mark.ok { background: var(--tt-success-soft); color: var(--tt-success); } .check-item .mark.no { background: var(--tt-danger-soft); color: var(--tt-danger-text); } .check-item .mark.info { background: var(--tt-surface-2); color: var(--tt-text-3); }
+.check-item .what { font-size: 13px; } .check-item .what small { display: block; color: var(--tt-text-3); }
+@media (max-width: 1000px) {
+  .setup { grid-template-columns: 1fr; }
+  .setup-nav { position: static; flex-direction: row; overflow-x: auto; gap: var(--tt-s2); padding-bottom: var(--tt-s2); margin-bottom: var(--tt-s2); border-bottom: 1px solid var(--tt-border); }
+  .setup-nav .group { display: none; }
+  .setup-nav a { flex: 0 0 auto; white-space: nowrap; border: 1px solid var(--tt-border); border-radius: 999px; padding: 5px var(--tt-s3); }
+  .setup-nav a small, .setup-nav a .badge { display: none; }
+  .setup-row, .setup-row.tiers, .setup-row.msg { grid-template-columns: 1fr 1fr; }
+}
 
 /* Sign-in: installation status sits beside the form, not inside it. */
 .login-status { display: flex; justify-content: center; gap: var(--tt-s2); flex-wrap: wrap; }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc, errorMessage, downloadAuth } from "../lib/trpc.ts";
-import { useCan, useMe } from "../lib/auth.tsx";
+import { Restricted, useCan, useMe } from "../lib/auth.tsx";
 import { Link, navigate } from "../lib/router.tsx";
 import { PageHead, Card, Table, Badge, Button, Loading, ErrorBox, Select, KV, ActionDialog, Callout, Json, useToast } from "../ui/kit.tsx";
 import { fmtDate, titleCase } from "../lib/format.ts";
@@ -16,6 +16,7 @@ export function DrawsPage() {
         {barrier.isLoading ? <Loading /> : barrier.error ? <ErrorBox error={barrier.error} /> : barrier.data && <div className="tt-col">
           <KV rows={[["Period", `${barrier.data.period.code} · ${fmtDate(barrier.data.period.startsAt)} → ${fmtDate(barrier.data.period.endsAt)}`], ["Eligible entries", barrier.data.eligible], ["Distinct participants", barrier.data.distinctParticipants], ["Excluded (prior winners)", barrier.data.exclusions], ["Plan", `${barrier.data.plan.totalWinners} winners (${barrier.data.plan.tiers.map((t) => `${t.count}× ${t.code}`).join(", ")}) + ${barrier.data.plan.totalAlternates} alternates${barrier.data.plan.onePrizePerParticipant ? " · one prize per participant" : ""}`]]} />
           {barrier.data.ok ? <Callout tone="success">All checks pass. Freezing takes an immutable snapshot of the candidate list and commits the random seed.</Callout> : <Callout tone="warning"><strong>Blocked:</strong> {barrier.data.blockers.map((b) => <div key={b.code}><span className="mono">{b.code}</span> {b.detail ? <span className="small muted">{JSON.stringify(b.detail)}</span> : null}</div>)}</Callout>}
+          {!can("draw.execute") && <Restricted perm="draw.execute" action="Freezing and executing a draw" />}
           {can("draw.execute") && <div className="tt-row"><Button variant="primary" disabled={!barrier.data.ok} onClick={() => setConfirm("freeze")}>Freeze draw</Button>{!barrier.data.ok && barrier.data.blockers.every((b) => b.code === "UNRESOLVED_SUBMISSIONS") && <Button onClick={() => setConfirm("override")}>Freeze anyway (documented override)</Button>}<Button variant="ghost" onClick={() => barrier.refetch()}>Re-check</Button></div>}
         </div>}
       </Card>
@@ -36,6 +37,9 @@ export function DrawDetailPage({ id }: { id: string }) {
       {status === "executing" && can("draw.execute") && <Button variant="primary" onClick={() => setDialog("execute")}>Resume execution</Button>}
       {status === "executed" && can("draw.approve") && !isOfficer && <><Button variant="primary" onClick={() => setDialog("approve")}>Approve</Button><Button variant="danger" onClick={() => setDialog("reject")}>Reject</Button></>}
       {status === "executed" && can("draw.approve") && isOfficer && <Callout tone="warning">You froze or executed this draw, so you cannot approve it.</Callout>}
+      {["frozen", "executing"].includes(status) && !can("draw.execute") && <Restricted perm="draw.execute" action="Executing this draw" />}
+      {status === "executed" && !can("draw.approve") && <Restricted perm="draw.approve" action="Approving or rejecting this draw" />}
+      {status === "approved" && !can("winner.manage") && <Restricted perm="winner.manage" action="Publishing the draw and creating winner records" />}
       {status === "approved" && can("winner.manage") && <Button variant="primary" onClick={() => setDialog("publish")}>Publish & create winner records</Button>}
       {["approved", "published"].includes(status) && can("draw.execute") && <Button variant="danger" onClick={() => setDialog("void")}>Void & re-run</Button>}
       {can("draw.bundle") && <Button onClick={async () => { try { await downloadAuth(`/api/draws/${id}/bundle.json`, `draw-${d.period?.code}-${String(draw.sequenceNo)}.json`); } catch (e) { toast.push(errorMessage(e), "error"); } }}>Download audit bundle</Button>}
