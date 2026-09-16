@@ -99,22 +99,18 @@ describe("audit findings", () => {
     expect(visual.every((r) => r.resolution === "open"), "visual matches never resolve to a decision").toBe(true);
   });
 
-  it("audit-1: the chain still verifies after an event's attribution is rewritten in place", async () => {
-    // Attribution IS inside the signed body — actorType and actorId are both in
-    // the canonical JSON that the entry hash covers. That is better than it
-    // looks at first glance and better than it needs to be for the chain itself.
-    //
-    // But verify() only recomputes sha256(prev + body) and compares it to the
-    // stored entry hash. It never checks that the COLUMNS agree with the body it
-    // just hashed — and every reader uses the columns: audit.list(), the console,
-    // and anything filtering by actorId. So rewriting actor_id in place changes
-    // who every consumer believes acted, while the integrity check stays green.
+  it("audit-1 (fixed): rewriting an event's attribution in place is detected", async () => {
+    // Attribution is inside the signed body — actorType and actorId are both in
+    // the canonical JSON the entry hash covers. verify() used to recompute only
+    // sha256(prev + body) and never check that the COLUMNS agreed with the body
+    // it had just hashed, and every reader uses the columns: audit.list(), the
+    // console, anything filtering by actorId. So rewriting actor_id in place
+    // changed who the system said approved a draw while the chain reported clean.
     const targetId = `tgt_${Math.random().toString(36).slice(2, 8)}`;
     const realActor = "stf_the_person_who_acted";
     await h.app.audit.record(h.app.db, { actorType: "staff", actorId: realActor, action: "draw.approved", targetType: "draw", targetId, reason: "approved by the second pair of eyes" });
 
-    const before = await h.app.audit.verify();
-    expect(before.ok, "the honest chain verifies").toBe(true);
+    expect((await h.app.audit.verify()).ok, "the honest chain verifies").toBe(true);
 
     // Exactly the edit a hostile or careless operator with database access makes.
     await h.app.db.update(schema.auditEvents).set({ actorId: "stf_somebody_else" }).where(eq(schema.auditEvents.targetId, targetId));
@@ -123,21 +119,98 @@ describe("audit findings", () => {
     const [row] = await h.app.db.select().from(schema.auditEvents).where(eq(schema.auditEvents.targetId, targetId));
     const signed = JSON.parse(row.body as string) as { actorId: string };
 
-    // The signed body still holds the truth...
+    // The body still holds the truth, and now the verifier says the row disagrees
+    // with it rather than passing the edit through in silence.
     expect(signed.actorId, "the body is untouched, so the evidence survives").toBe(realActor);
-    // ...but the column every reader uses now disagrees with it...
-    expect(row.actorId).toBe("stf_somebody_else");
-    const listed = await h.app.audit.list({ targetType: "draw", targetId });
-    expect(listed[0].actorId, "audit.list reports the rewritten actor").toBe("stf_somebody_else");
-    // ...and the integrity check does not notice.
-    //
-    // Flip this to false once verify() cross-checks each row's columns against
-    // its own signed body. The fix is small and needs no schema change: parse
-    // body and compare actorType/actorId/action/targetType/targetId/reason.
-    expect(
-      after.ok,
-      "verify() reports a clean chain even though the attribution on a draw.approved event was rewritten",
-    ).toBe(true);
+    expect(after.ok).toBe(false);
+    const finding = after.broken.find((b) => b.id === row.id);
+    expect(finding?.what).toBe("body_column_mismatch");
+    expect(finding?.fields).toContain("actorId");
+    // ...and only the field that was actually changed is named.
+    expect(finding?.fields).toEqual(["actorId"]);
+
+    // Put it back; the chain is clean again, which also shows the check is keyed
+    // on the disagreement and not on the row simply having been written to.
+    await h.app.db.update(schema.auditEvents).set({ actorId: realActor }).where(eq(schema.auditEvents.targetId, targetId));
+    expect((await h.app.audit.verify()).ok).toBe(true);
+  });
+
+  it("audit-1 (fixed): every other signed field is covered too, and honest rows stay clean", async () => {
+    // A guard that only watched actorId would be trivially sidestepped by editing
+    // the action or the target instead.
+    const cases: Array<[string, Record<string, unknown>, string]> = [
+      ["action", { action: "draw.rejected" }, "action"],
+      ["targetType", { targetType: "winner" }, "targetType"],
+      ["reason", { reason: "a different reason entirely" }, "reason"],
+      ["actorType", { actorType: "system" }, "actorType"],
+      ["payload", { payload: { injected: true } }, "payload"],
+    ];
+    for (const [name, patch, field] of cases) {
+      const targetId = `tgt_${name}_${Math.random().toString(36).slice(2, 8)}`;
+      await h.app.audit.record(h.app.db, { actorType: "staff", actorId: "stf_a", action: "draw.approved", targetType: "draw", targetId, reason: "original", payload: { original: true } });
+      const [row] = await h.app.db.select().from(schema.auditEvents).where(eq(schema.auditEvents.targetId, targetId));
+      await h.app.db.update(schema.auditEvents).set(patch).where(eq(schema.auditEvents.id, row.id));
+      const r = await h.app.audit.verify();
+      const finding = r.broken.find((b) => b.id === row.id);
+      expect(finding?.fields, `editing ${name} in place must be named`).toContain(field);
+      await h.app.db.update(schema.auditEvents).set({ actorType: "staff", action: "draw.approved", targetType: "draw", reason: "original", payload: { original: true } }).where(eq(schema.auditEvents.id, row.id));
+    }
+    // The whole chain — several hundred honest events written by the fixtures
+    // above — must still verify. A cross-check that cries wolf is worse than none,
+    // and the timestamp is the field most likely to: Postgres returns timestamptz
+    // as "2026-09-16 12:11:07.067+00" while the body carries the same instant as
+    // "2026-09-16T12:11:07.067Z", so they are compared as instants, not strings.
+    const final = await h.app.audit.verify();
+    expect(final.ok, `honest chain reported ${final.brokenCount} broken: ${JSON.stringify(final.broken.slice(0, 3))}`).toBe(true);
+    expect(final.total).toBeGreaterThan(20);
+  });
+
+  it("audit-1 (fixed): the stored payload is exactly what the body signed", async () => {
+    // canonicalJson maps undefined to null and KEEPS the key; the driver's
+    // JSON.stringify DROPS an undefined key on the way into jsonb. So a payload
+    // carrying an undefined was signed one way and stored another, and the column
+    // was never a faithful copy of the signed evidence. Nobody was misled about
+    // who acted, but the cross-check above cannot be strict while that is true.
+    const targetId = `tgt_${Math.random().toString(36).slice(2, 8)}`;
+    await h.app.audit.record(h.app.db, {
+      actorType: "staff", actorId: "stf_a", action: "staff.update", targetType: "staff_user", targetId,
+      payload: { name: undefined, roles: undefined, status: "disabled" } as Record<string, unknown>,
+    });
+    const [row] = await h.app.db.select().from(schema.auditEvents).where(eq(schema.auditEvents.targetId, targetId));
+    const signed = JSON.parse(row.body as string) as { payload: Record<string, unknown> };
+    expect(signed.payload, "the body normalises undefined to an explicit null").toEqual({ name: null, roles: null, status: "disabled" });
+    expect(row.payload, "and the column now holds the same value rather than dropping the keys").toEqual(signed.payload);
+    expect((await h.app.audit.verify()).ok).toBe(true);
+  });
+
+  it("audit-1 (fixed): treating a dropped null as equal does not hide a changed value", async () => {
+    // The comparison strips null-valued keys so rows written before the writer
+    // was fixed — an explicit null in the body, no key in the column — do not all
+    // report as tampered with. That tolerance must not extend to a real edit.
+    const targetId = `tgt_${Math.random().toString(36).slice(2, 8)}`;
+    await h.app.audit.record(h.app.db, {
+      actorType: "staff", actorId: "stf_a", action: "staff.update", targetType: "staff_user", targetId,
+      payload: { status: "disabled", roles: null } as Record<string, unknown>,
+    });
+    const [row] = await h.app.db.select().from(schema.auditEvents).where(eq(schema.auditEvents.targetId, targetId));
+
+    // Dropping the null key is tolerated — it carries no information.
+    await h.app.db.update(schema.auditEvents).set({ payload: { status: "disabled" } }).where(eq(schema.auditEvents.id, row.id));
+    expect((await h.app.audit.verify()).ok, "an absent key and an explicit null are the same statement").toBe(true);
+
+    // Changing the value that matters is not.
+    await h.app.db.update(schema.auditEvents).set({ payload: { status: "active" } }).where(eq(schema.auditEvents.id, row.id));
+    const after = await h.app.audit.verify();
+    expect(after.ok).toBe(false);
+    expect(after.broken.find((b) => b.id === row.id)?.fields).toContain("payload");
+
+    // Giving a real key a null value is not tolerated either: the other side
+    // still holds the value, so the two no longer agree.
+    await h.app.db.update(schema.auditEvents).set({ payload: { status: null } }).where(eq(schema.auditEvents.id, row.id));
+    expect((await h.app.audit.verify()).ok, "nulling out a recorded value is a change").toBe(false);
+
+    await h.app.db.update(schema.auditEvents).set({ payload: { status: "disabled", roles: null } }).where(eq(schema.auditEvents.id, row.id));
+    expect((await h.app.audit.verify()).ok).toBe(true);
   });
 
   it("ops-1: the sample-data guard keys on the database's stamp, not the deployment's configuration", async () => {
