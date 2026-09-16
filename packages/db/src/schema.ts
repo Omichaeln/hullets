@@ -27,7 +27,7 @@ export const staffSessions = pgTable("staff_sessions", {
 
 // ---------------------------------------------------------------- campaign
 export const campaigns = pgTable("campaigns", {
-  id: text("id").primaryKey(), code: text("code").notNull(), name: text("name").notNull(), status: text("status").notNull().default("draft"),
+  id: text("id").primaryKey(), code: text("code").notNull(), name: text("name").notNull(), description: text("description").notNull().default(""), status: text("status").notNull().default("draft"),
   timezone: text("timezone").notNull().default("Africa/Harare"), startsAt: ts("starts_at").notNull(), endsAt: ts("ends_at").notNull(),
   sample: boolean("sample").notNull().default(false), createdBy: text("created_by"), createdAt: created(), updatedAt: ts("updated_at").notNull().defaultNow(),
 }, (t) => [uniqueIndex("uq_campaign_code").on(t.code), check("ck_campaign_window", sql`${t.endsAt} > ${t.startsAt}`)]);

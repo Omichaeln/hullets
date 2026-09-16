@@ -95,6 +95,30 @@ describe("console information architecture", () => {
     expect(app).not.toContain('{open && <div className="tt-scrim"');
   });
 
+  it("every platform user lands on the campaign dashboard, and direct links are honoured", () => {
+    // "/" is the dashboard for the technical console; the promotion desk keeps its own Today.
+    expect(routes).toMatch(/if \(path === "\/"\) page = <DashboardPage \/>;/);
+    expect(nav).toMatch(/\{ to: "\/", label: "Dashboard", perm: "report.read" \}/);
+    // The create page is matched BEFORE the :id pattern, or "new" would be read as a campaign id.
+    expect(routes.indexOf('path === "/campaigns/new"')).toBeGreaterThan(-1);
+    expect(routes.indexOf('path === "/campaigns/new"')).toBeLessThan(routes.indexOf('match("/campaigns/:id"'));
+    // Nothing in Routes() rewrites a deep link on sign-in: the one redirect is the password gate.
+    const body = routes.slice(0, routes.indexOf("function Session(")).split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+    expect((body.match(/navigate\(/g) ?? []).length).toBe(1);
+  });
+
+  it("the account control states the person's roles once, in the menu, not in the header", () => {
+    const shell = app.slice(app.indexOf("function Shell("), app.indexOf("function Routes()"));
+    const trigger = shell.slice(shell.indexOf("<Menu"), shell.indexOf("<div className=\"tt-menu-head\""));
+    expect(trigger).not.toMatch(/roles|roleLabel|titleCase/);
+    expect(trigger).toContain('className="tt-avatar"'); expect(trigger).toContain('className="tt-user-name"'); expect(trigger).toContain('className="tt-user-chevron"');
+    expect(shell).toMatch(/tt-menu-roles[\s\S]*roleLabel\(r\)/);
+    // The trigger has an accessible name even when the visible name is hidden on a phone.
+    expect(trigger).toMatch(/ariaLabel=\{`Account menu: /);
+    expect(css).toContain(".tt-user-name { display: block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;");
+    expect(css).not.toContain(".tt-user-name small");
+  });
+
   it("the placeholder teal square is gone", () => {
     expect(css).not.toContain(".tt-brand .mark");
     expect(app).not.toContain('<span className="mark">');

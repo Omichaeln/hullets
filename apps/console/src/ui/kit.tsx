@@ -29,7 +29,7 @@ export function Brand({ lockup = "horizontal", height = 28, className }: { locku
  * A small popover menu: click-outside and Escape close it, and choosing a link or
  * a `.tt-menu-item` button closes it too. Used for the person in the topbar.
  */
-export function Menu({ label, children, align = "right", className }: { label: ReactNode; children: ReactNode; align?: "left" | "right"; className?: string }) {
+export function Menu({ label, children, align = "right", className, ariaLabel }: { label: ReactNode; children: ReactNode; align?: "left" | "right"; className?: string; ariaLabel?: string }) {
   const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -39,7 +39,7 @@ export function Menu({ label, children, align = "right", className }: { label: R
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
   }, [open]);
   return <div className={`tt-menu ${className ?? ""}`} ref={ref}>
-    <button type="button" className="tt-menu-trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{label}</button>
+    <button type="button" className="tt-menu-trigger" aria-haspopup="menu" aria-expanded={open} aria-label={ariaLabel} onClick={() => setOpen((o) => !o)}>{label}</button>
     {open && <div className={`tt-menu-pop ${align}`} role="menu" onClick={(e) => { if ((e.target as HTMLElement).closest("a.tt-menu-item, button.tt-menu-item:not(.static)")) setOpen(false); }}>{children}</div>}
   </div>;
 }

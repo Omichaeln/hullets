@@ -20,10 +20,14 @@ describe("security, RBAC, privacy, audit", () => {
     const period = (await h.app.campaigns.periods(h.campaign.id))[0];
     expect(await http.status(() => http.client(tok.admin).draws.freeze.mutate({ campaignId: h.campaign.id, periodId: period.id }))).toBe(403);
     expect(await http.status(() => http.client(tok.reviewer).draws.freeze.mutate({ campaignId: h.campaign.id, periodId: period.id }))).toBe(403);
-    expect(await http.status(() => http.client(tok.reviewer).winners.list.query({}))).toBe(403);
+    // The platform team is read-wide and act-narrow: a reviewer may LOOK at winners
+    // and the support queue, and may not touch either.
+    expect(await http.status(() => http.client(tok.reviewer).winners.list.query({}))).toBe(200);
+    expect(await http.status(() => http.client(tok.reviewer).winners.notify.mutate({ winnerId: "win_x" }))).toBe(403);
+    expect(await http.status(() => http.client(tok.reviewer).support.claim.mutate({ phone: "263770000000" }))).toBe(403);
     expect(await http.status(() => http.client(tok.support).participants.revealIdentity.mutate({ participantId: "ptc_x", reason: "x" }))).toBe(403);
     expect(await http.status(() => http.client(tok.reviewer).submissions.get.query({ submissionId: "sub_doesnotexist" }))).toBe(404);
-    expect(await http.status(() => http.client(tok.reviewer).support.queue.query())).toBe(403);
+    expect(await http.status(() => http.client(tok.reviewer).support.queue.query())).toBe(200);
     // role change and disabling revoke sessions
     const u = (await h.app.auth.byEmail("support@example.test"))!;
     expect(await http.status(() => http.client(tok.support).auth.me.query())).toBe(200);

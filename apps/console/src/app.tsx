@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { trpc, makeClient, session } from "./lib/trpc.ts";
-import { AuthProvider, useMe, useCan, type Me, type Permission } from "./lib/auth.tsx";
+import { AuthProvider, useMe, useCan, roleLabel, type Me, type Permission } from "./lib/auth.tsx";
 import { usePath, match, Link, navigate } from "./lib/router.tsx";
 import { ToastProvider, Loading, Brand, Menu } from "./ui/kit.tsx";
 import { getTheme, applyTheme, THEMES, type Theme } from "./lib/theme.ts";
-import { titleCase } from "./lib/format.ts";
 import { LoginPage } from "./pages/login.tsx";
 import { AccountPage } from "./pages/account.tsx";
-import { OverviewPage } from "./pages/overview.tsx";
-import { CampaignsPage, CampaignDetailPage } from "./pages/campaigns.tsx";
+import { DashboardPage } from "./pages/dashboard.tsx";
+import { CampaignsPage, NewCampaignPage } from "./pages/campaigns.tsx";
+import { CampaignDetailPage } from "./pages/campaign-setup.tsx";
 import { MasterDataPage } from "./pages/master-data.tsx";
 import { ParticipantsPage, ParticipantDetailPage } from "./pages/participants.tsx";
 import { SubmissionsPage, SubmissionDetailPage } from "./pages/submissions.tsx";
@@ -40,7 +40,7 @@ type NavItem = { to: string; label: string; perm?: Permission };
  * they live on the person, in the topbar menu.
  */
 const NAV: Array<{ group: string; items: NavItem[] }> = [
-  { group: "Run", items: [{ to: "/", label: "Overview", perm: "report.read" }, { to: "/submissions", label: "Submissions & review", perm: "submission.read" }, { to: "/entries", label: "Entries", perm: "entry.read" }, { to: "/participants", label: "Participants", perm: "participant.read" }, { to: "/support", label: "Support", perm: "support.read" }] },
+  { group: "Run", items: [{ to: "/", label: "Dashboard", perm: "report.read" }, { to: "/submissions", label: "Submissions & review", perm: "submission.read" }, { to: "/entries", label: "Entries", perm: "entry.read" }, { to: "/participants", label: "Participants", perm: "participant.read" }, { to: "/support", label: "Support", perm: "support.read" }] },
   { group: "Draws", items: [{ to: "/draws", label: "Draws", perm: "draw.read" }, { to: "/winners", label: "Winners & claims", perm: "winner.read" }] },
   { group: "Set up", items: [{ to: "/campaigns", label: "Campaigns", perm: "campaign.read" }, { to: "/master-data", label: "Outlets & products", perm: "campaign.read" }, { to: "/simulator", label: "Simulator", perm: "simulator.use" }] },
   { group: "Administer", items: [{ to: "/staff", label: "Access", perm: "staff.manage" }, { to: "/settings", label: "Settings", perm: "settings.write" }] },
@@ -80,7 +80,6 @@ function Shell({ children }: { children: React.ReactNode }) {
   const chooseTheme = (t: Theme) => { applyTheme(t); setTheme(t); };
   const cfg = trpc.public.config.useQuery(undefined, { staleTime: 60_000 });
   const initials = (me?.name ?? "?").split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-  const roles = (me?.roles ?? []).map(titleCase).join(", ");
   return <div className="tt-shell" data-collapsed={collapsed ? "true" : "false"}>
     <div className={`tt-scrim ${drawer ? "on" : ""}`} onClick={() => setDrawer(false)} aria-hidden="true" />
     <aside className={`tt-sidebar ${drawer ? "open" : ""}`} aria-label="Navigation">
@@ -110,8 +109,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         {cfg.data?.sampleData && <span className="badge warning">Sample data</span>}
         {cfg.data && cfg.data.transport !== "configured" && <span className="badge warning">WhatsApp simulated</span>}
         <span className="spacer" />
-        <Menu align="right" label={<span className="tt-user"><span className="tt-avatar" aria-hidden="true">{initials}</span><span className="tt-user-name"><span>{me?.name}</span><small>{roles}</small></span></span>}>
-          <div className="tt-menu-head"><strong>{me?.name}</strong><div className="small muted">{me?.email}</div><div className="small muted">{roles}</div></div>
+        {/* The account control is a compact identifier — initials, the name, a chevron. The
+            person's roles are stated ONCE, in the menu, where there is room to say them in full. */}
+        <Menu align="right" ariaLabel={`Account menu: ${me?.name ?? ""}`} label={<span className="tt-user"><span className="tt-avatar" aria-hidden="true">{initials}</span><span className="tt-user-name">{me?.name}</span><svg className="tt-user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></span>}>
+          <div className="tt-menu-head"><strong>{me?.name}</strong><div className="small muted wrap">{me?.email}</div><div className="tt-menu-roles">{(me?.roles ?? []).map((r) => <span key={r} className="badge primary">{roleLabel(r)}</span>)}</div></div>
           <Link to="/account" className="tt-menu-item">My account<span className="small muted">password · two-step</span></Link>
           <div className="tt-menu-item static"><span>Theme</span><div className="tt-seg" role="radiogroup" aria-label="Theme">{THEMES.map(([t, l]) => <button key={t} type="button" role="radio" aria-checked={theme === t} className={theme === t ? "on" : ""} onClick={() => chooseTheme(t)}>{l}</button>)}</div></div>
           <button type="button" className="tt-menu-item danger" onClick={() => void signOut()}>Sign out</button>
@@ -159,10 +160,13 @@ function Routes() {
   const technical = me.roles.some((r) => TECHNICAL_ROLES.includes(r));
   if (promotion && !forceFull) return <PromotionDesk onSwitchToFull={technical ? () => setForceFull(true) : null} />;
   let page: React.ReactNode = null; let p: Record<string, string> | null;
-  if (path === "/" ) page = <OverviewPage />;
+  // "/" is the campaign dashboard for every platform user, the administrator included.
+  // Direct links to any other page are honoured as they are.
+  if (path === "/") page = <DashboardPage />;
   else if (path === "/account") page = <AccountPage />;
   else if (path === "/settings") page = <SettingsPage />;
   else if (path === "/campaigns") page = <CampaignsPage />;
+  else if (path === "/campaigns/new") page = <NewCampaignPage />;
   else if ((p = match("/campaigns/:id", path))) page = <CampaignDetailPage id={p.id} />;
   else if (path === "/master-data") page = <MasterDataPage />;
   else if (path === "/participants") page = <ParticipantsPage />;
@@ -181,7 +185,7 @@ function Routes() {
   else if (path === "/audit") page = <AuditPage />;
   else if (path === "/readiness") page = <ReadinessPage />;
   else if (path === "/simulator") page = <SimulatorPage />;
-  else page = <div className="empty">Page not found. <Link to="/">Go to the overview</Link></div>;
+  else page = <div className="empty">Page not found. <Link to="/">Go to the dashboard</Link></div>;
   return <Shell>{page}</Shell>;
 }
 
