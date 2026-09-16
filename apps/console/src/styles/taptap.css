@@ -210,3 +210,46 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .rule-list { display: grid; gap: 4px; font-size: 12.5px; } .rule-list > div { display: flex; gap: 8px; align-items: baseline; }
 .progress { height: 6px; background: var(--tt-surface-2); border-radius: 999px; overflow: hidden; } .progress > i { display: block; height: 100%; background: var(--tt-primary); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ---------------------------------------------------------------- promotion desk
+   The client's console. It reuses every TapTap token — nothing here introduces a
+   colour, a radius or a font — so it inherits the brand and both themes for free.
+   It is a separate shell rather than a variant of .tt-shell because it has four
+   destinations and no sidebar; sharing the grid would have meant a column that is
+   always empty. */
+.desk-shell { min-height: 100vh; background: var(--tt-bg); }
+.desk-top { display: flex; align-items: center; gap: var(--tt-s4); flex-wrap: wrap; padding: var(--tt-s3) var(--tt-s6); background: var(--tt-surface); border-bottom: 1px solid var(--tt-border); position: sticky; top: 0; z-index: 5; }
+.desk-brand { display: flex; align-items: center; gap: var(--tt-s3); }
+.desk-brand-name { font-family: var(--tt-font-display); font-weight: 700; color: var(--tt-primary); white-space: nowrap; }
+.desk-nav { display: flex; gap: var(--tt-s1); flex-wrap: wrap; }
+.desk-nav button { border: none; background: none; color: var(--tt-text-2); font-size: 14px; font-weight: 500; padding: 7px var(--tt-s4); border-radius: var(--tt-r-md); cursor: pointer; }
+.desk-nav button:hover { background: var(--tt-surface-2); color: var(--tt-text); }
+.desk-nav button.on { background: var(--tt-primary); color: var(--tt-on-primary); font-weight: 600; }
+.desk-who { margin-left: auto; display: flex; align-items: center; gap: var(--tt-s3); color: var(--tt-text-3); font-size: 13px; }
+.desk-main { padding: var(--tt-s6); max-width: 1440px; margin: 0 auto; }
+@media (max-width: 900px) { .desk-main, .desk-top { padding: var(--tt-s4); } .desk-who { width: 100%; margin-left: 0; } }
+
+/* Today. Two tiles are buttons because two of them are jobs. */
+.desk-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--tt-s4); margin-bottom: var(--tt-s5); }
+.desk-tile { padding: 0; border: none; background: none; text-align: left; }
+.desk-tile .tt-card { height: 100%; }
+.desk-tile.act { cursor: pointer; }
+.desk-tile.act:hover .tt-card { border-color: var(--tt-primary); }
+.desk-outcomes { display: flex; flex-wrap: wrap; gap: var(--tt-s3); }
+.desk-outcome { display: flex; align-items: center; gap: var(--tt-s2); padding: var(--tt-s2) var(--tt-s3); border: 1px solid var(--tt-border); border-radius: 999px; background: var(--tt-surface); cursor: pointer; }
+.desk-outcome:hover { border-color: var(--tt-primary); }
+.desk-outcome strong { font-family: var(--tt-font-display); font-size: 15px; }
+
+/* Filters. They wrap rather than scroll: an operator must be able to see every
+   filter that is currently applied without hunting for one off-screen. */
+.desk-filters { display: flex; flex-wrap: wrap; gap: var(--tt-s4); padding: var(--tt-s4); align-items: flex-end; }
+.desk-filters > .field { min-width: 150px; }
+.desk-range { display: flex; align-items: center; gap: var(--tt-s2); }
+.desk-range .input { width: 74px; }
+.desk-filters-actions { margin-left: auto; }
+.desk-count { color: var(--tt-text-3); font-size: 13px; margin: var(--tt-s4) 0 var(--tt-s2); }
+.desk-chips { display: flex; flex-wrap: wrap; gap: var(--tt-s2); margin-bottom: var(--tt-s4); }
+.desk-chips button { border: 1px solid var(--tt-border); background: var(--tt-surface); border-radius: 999px; padding: 5px var(--tt-s3); font-size: 13px; color: var(--tt-text-2); cursor: pointer; }
+.desk-chips button.on { background: var(--tt-primary-soft); color: var(--tt-on-primary-soft); border-color: transparent; font-weight: 600; }
+.desk-transcript { display: flex; flex-direction: column; gap: var(--tt-s2); margin: var(--tt-s3) 0; max-height: 340px; overflow: auto; padding: var(--tt-s2); background: var(--tt-surface-2); border-radius: var(--tt-r-md); }
+.muted { color: var(--tt-text-3); font-size: 12px; }

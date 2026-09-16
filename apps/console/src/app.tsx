@@ -20,6 +20,7 @@ import { StaffPage } from "./pages/staff.tsx";
 import { AuditPage } from "./pages/audit.tsx";
 import { ReadinessPage } from "./pages/readiness.tsx";
 import { SimulatorPage } from "./pages/simulator.tsx";
+import { PromotionDesk } from "./promotion/Desk.tsx";
 
 type NavItem = { to: string; label: string; perm?: Permission; match?: string[] };
 const NAV: Array<{ group: string; items: NavItem[] }> = [
@@ -55,10 +56,24 @@ function Shell({ children }: { children: React.ReactNode }) {
   </div>;
 }
 
+/** Roles that mean "the client's promotion team", as opposed to the platform team. */
+const PROMOTION_ROLES = ["promotion_admin", "promotion_assistant"];
+/** Roles that mean "the platform team" — anyone holding one can reach the technical console. */
+const TECHNICAL_ROLES = ["campaign_manager", "reviewer", "draw_officer", "draw_approver", "fulfilment", "auditor", "platform_admin", "support"];
+
 function Routes() {
   const full = usePath(); const path = full.split("?")[0]; const { me } = useMe();
+  const [forceFull, setForceFull] = useState(false);
   if (!me) return <LoginPage />;
   if (me.mustChangePassword && path !== "/account") { navigate("/account?mustChange=1", { replace: true }); return null; }
+  // Which console a person gets is decided by the roles on their account, not by
+  // a setting they could lose. Someone who ALSO holds a technical role (a
+  // platform engineer sitting with the client, say) can switch to the full
+  // console, because taking the technical surface away from someone who needs it
+  // would be worse than offering a client-facing one they can ignore.
+  const promotion = me.roles.some((r) => PROMOTION_ROLES.includes(r));
+  const technical = me.roles.some((r) => TECHNICAL_ROLES.includes(r));
+  if (promotion && !forceFull) return <PromotionDesk onSwitchToFull={technical ? () => setForceFull(true) : null} />;
   let page: React.ReactNode = null; let p: Record<string, string> | null;
   if (path === "/" ) page = <OverviewPage />;
   else if (path === "/account") page = <AccountPage />;
