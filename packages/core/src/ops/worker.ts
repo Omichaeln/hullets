@@ -23,11 +23,11 @@ import { SendError } from "../whatsapp/transport.ts";
 export class Worker {
   private timer: NodeJS.Timeout | null = null; private running = false; private ticks = 0; private lastTickAt: string | null = null;
   constructor(private d: { db: Db; cfg: Config; environment: string; queue: QueueService; outbox: OutboxService; crm: CrmService; transport: WhatsAppTransport; conversation: ConversationEngine; pipeline: ReceiptPipeline; winners: WinnerService; media: MediaService; campaigns: CampaignService; signals: OpsSignals; audit: AuditService; log: Logger; intervalMs?: number }) {}
-  start() { if (!this.timer) this.timer = setInterval(() => void this.tick(), this.d.intervalMs ?? 1500); }
+  start() { if (!this.timer) this.timer = setInterval(() => void this.tick(), this.d.intervalMs ?? this.d.cfg.WORKER_POLL_MS); }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
   health() { return { running: !!this.timer, ticks: this.ticks, lastTickAt: this.lastTickAt }; }
 
-  async tick({ maxEvents = 25, maxJobs = 10, maxOutbound = 25, maxCrm = 10 } = {}) {
+  async tick({ maxEvents = this.d.cfg.WORKER_EVENT_BATCH, maxJobs = this.d.cfg.WORKER_JOB_BATCH, maxOutbound = this.d.cfg.WORKER_EVENT_BATCH, maxCrm = this.d.cfg.WORKER_JOB_BATCH } = {}) {
     if (this.running) return; this.running = true; this.ticks++;
     try {
       for (let i = 0; i < maxEvents; i++) if (!(await this.processEvent())) break;

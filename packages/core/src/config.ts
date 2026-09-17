@@ -6,13 +6,18 @@ import { z } from "zod";
 export const CONFIG_DOC: Array<{ name: string; default: string; description: string; secret?: boolean }> = [
   { name: "ENVIRONMENT", default: "local", description: "local | test | staging | production. Recorded in the database on first migration; production enables activation gates and refuses simulators." },
   { name: "DATABASE_URL", default: "postgres://promo:promo@127.0.0.1:5432/promo", description: "PostgreSQL 16 connection string (one database per environment)." },
+  { name: "DB_POOL_MAX", default: "10", description: "Maximum PostgreSQL connections for this process; size separately for API and worker services." },
+  { name: "DB_STATEMENT_TIMEOUT_MS", default: "30000", description: "PostgreSQL statement timeout." },
+  { name: "DB_CONNECTION_TIMEOUT_MS", default: "5000", description: "PostgreSQL connection acquisition timeout." },
   { name: "HOST", default: "127.0.0.1", description: "Bind address (0.0.0.0 on a PaaS)." },
   { name: "PORT", default: "8080", description: "HTTP port for API, webhook and console." },
   { name: "PUBLIC_BASE_URL", default: "", description: "Public HTTPS origin of this service (webhook URL, console links)." },
   { name: "CORS_ORIGINS", default: "", description: "Comma-separated browser origins allowed to call the API cross-origin. Empty (default) when the API serves the console itself." },
+  { name: "HTTP_MAX_IN_FLIGHT", default: "200", description: "Maximum concurrent webhook/tRPC requests per API replica before load shedding." },
   { name: "MEDIA_ROOT", default: "./data/media", description: "Private receipt media root (filesystem adapter). Never inside the web root." },
   { name: "STORAGE_DRIVER", default: "fs", description: "fs | s3 (S3-compatible bucket via S3_* variables)." },
   { name: "S3_BUCKET", default: "", description: "Bucket for STORAGE_DRIVER=s3." },
+  { name: "S3_PREFIX", default: "media", description: "Object-key prefix for receipt media." },
   { name: "S3_ENDPOINT", default: "", description: "S3-compatible endpoint (optional)." },
   { name: "S3_REGION", default: "us-east-1", description: "Bucket region." },
   { name: "S3_ACCESS_KEY_ID", default: "", description: "Storage credential.", secret: true },
@@ -44,60 +49,46 @@ export const CONFIG_DOC: Array<{ name: string; default: string; description: str
   { name: "CLAIM_WINDOW_DAYS", default: "7", description: "Winner claim deadline after notification (test value; D-17)." },
   { name: "RETENTION_MEDIA_DAYS", default: "90", description: "Raw receipt image retention (D-22 pending)." },
   { name: "WORKER_MODE", default: "embedded", description: "embedded (worker loop inside the API process) | external (run `npm run worker` separately) | off." },
+  { name: "WORKER_POLL_MS", default: "1500", description: "Worker poll interval." },
+  { name: "WORKER_EVENT_BATCH", default: "25", description: "Maximum inbound events claimed per worker tick." },
+  { name: "WORKER_JOB_BATCH", default: "10", description: "Maximum jobs claimed per worker tick." },
   { name: "LOG_LEVEL", default: "info", description: "pino log level." },
   { name: "SEED_ON_BOOT", default: "false", description: "Non-production only: seed the sample campaign on start if absent." },
 ];
 
+const boundedInt = (fallback: number, min: number, max: number) => z.coerce.number().int().min(min).max(max).default(fallback);
 const Env = z.object({
   ENVIRONMENT: z.enum(["local", "test", "staging", "production"]).default("local"),
   DATABASE_URL: z.string().default("postgres://promo:promo@127.0.0.1:5432/promo"),
+  DB_POOL_MAX: boundedInt(10, 1, 100), DB_STATEMENT_TIMEOUT_MS: boundedInt(30_000, 1_000, 120_000), DB_CONNECTION_TIMEOUT_MS: boundedInt(5_000, 500, 30_000),
   HOST: z.string().default("127.0.0.1"), PORT: z.coerce.number().int().nonnegative().default(8080), PUBLIC_BASE_URL: z.string().default(""),
-  CORS_ORIGINS: z.string().default("").transform((v) => v.split(",").map((o) => o.trim()).filter(Boolean)),
-  MEDIA_ROOT: z.string().default("./data/media"), STORAGE_DRIVER: z.enum(["fs", "s3"]).default("fs"),
-  S3_BUCKET: z.string().default(""), S3_ENDPOINT: z.string().default(""), S3_REGION: z.string().default("us-east-1"), S3_ACCESS_KEY_ID: z.string().default(""), S3_SECRET_ACCESS_KEY: z.string().default(""),
-  BOOTSTRAP_ADMIN_EMAIL: z.string().default(""), BOOTSTRAP_ADMIN_PASSWORD: z.string().default(""),
-  DATA_KEY: z.string().default(""), AUDIT_SIGNING_KEY: z.string().default(""), SESSION_HOURS: z.coerce.number().positive().default(12),
-  DEFAULT_COUNTRY_CODE: z.string().regex(/^\d{1,3}$/).default("263"),
-  WHATSAPP_PROVIDER: z.enum(["cloud-api", "simulator"]).default("simulator"), META_GRAPH_VERSION: z.string().default("v21.0"), META_PHONE_NUMBER_ID: z.string().default(""), META_WABA_ID: z.string().default(""), META_ACCESS_TOKEN: z.string().default(""), META_APP_SECRET: z.string().default(""), META_VERIFY_TOKEN: z.string().default(""),
-  OUTBOUND_ALLOWLIST: z.string().default(""),
+  CORS_ORIGINS: z.string().default("").transform((v) => v.split(",").map((o) => o.trim()).filter(Boolean)), HTTP_MAX_IN_FLIGHT: boundedInt(200, 10, 10_000),
+  MEDIA_ROOT: z.string().default("./data/media"), STORAGE_DRIVER: z.enum(["fs", "s3"]).default("fs"), S3_BUCKET: z.string().default(""), S3_PREFIX: z.string().default("media"), S3_ENDPOINT: z.string().default(""), S3_REGION: z.string().default("us-east-1"), S3_ACCESS_KEY_ID: z.string().default(""), S3_SECRET_ACCESS_KEY: z.string().default(""),
+  BOOTSTRAP_ADMIN_EMAIL: z.string().default(""), BOOTSTRAP_ADMIN_PASSWORD: z.string().default(""), DATA_KEY: z.string().default(""), AUDIT_SIGNING_KEY: z.string().default(""), SESSION_HOURS: z.coerce.number().positive().default(12),
+  DEFAULT_COUNTRY_CODE: z.string().regex(/^\d{1,3}$/).default("263"), WHATSAPP_PROVIDER: z.enum(["cloud-api", "simulator"]).default("simulator"), META_GRAPH_VERSION: z.string().default("v21.0"), META_PHONE_NUMBER_ID: z.string().default(""), META_WABA_ID: z.string().default(""), META_ACCESS_TOKEN: z.string().default(""), META_APP_SECRET: z.string().default(""), META_VERIFY_TOKEN: z.string().default(""), OUTBOUND_ALLOWLIST: z.string().default(""),
   EXTRACTOR: z.enum(["anthropic", "tesseract", "anthropic+tesseract", "simulator"]).default("tesseract"), ANTHROPIC_API_KEY: z.string().default(""), ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"), ANTHROPIC_BASE_URL: z.string().default(""), EXTRACTION_TIMEOUT_MS: z.coerce.number().positive().default(45_000),
-  CRM_PROVIDER: z.enum(["none", "http-contract"]).default("none"), CRM_BASE_URL: z.string().default(""), CRM_TOKEN: z.string().default(""), CRM_TIMEOUT_MS: z.coerce.number().positive().default(10_000),
-  REVIEW_SLA_HOURS: z.coerce.number().positive().default(24), CLAIM_WINDOW_DAYS: z.coerce.number().positive().default(7), RETENTION_MEDIA_DAYS: z.coerce.number().positive().default(90),
-  WORKER_MODE: z.enum(["embedded", "external", "off"]).default("embedded"), LOG_LEVEL: z.string().default("info"), SEED_ON_BOOT: z.string().default("false"),
+  CRM_PROVIDER: z.enum(["none", "http-contract"]).default("none"), CRM_BASE_URL: z.string().default(""), CRM_TOKEN: z.string().default(""), CRM_TIMEOUT_MS: z.coerce.number().positive().default(10_000), REVIEW_SLA_HOURS: z.coerce.number().positive().default(24), CLAIM_WINDOW_DAYS: z.coerce.number().positive().default(7), RETENTION_MEDIA_DAYS: z.coerce.number().positive().default(90),
+  WORKER_MODE: z.enum(["embedded", "external", "off"]).default("embedded"), WORKER_POLL_MS: boundedInt(1_500, 250, 60_000), WORKER_EVENT_BATCH: boundedInt(25, 1, 200), WORKER_JOB_BATCH: boundedInt(10, 1, 100), LOG_LEVEL: z.string().default("info"), SEED_ON_BOOT: z.string().default("false"),
 });
 export type Config = z.infer<typeof Env> & { isProduction: boolean; isLocal: boolean; outboundAllowlist: string[] };
 
-/** Reads a local .env file (KEY=value lines) into process.env without overriding values already set. Never logs values. */
 export function loadDotEnv(file = process.env.ENV_FILE ?? ".env") {
   let text: string; try { text = fs.readFileSync(path.resolve(file), "utf8"); } catch { return 0; }
-  let n = 0;
-  for (const raw of text.split(/\r?\n/)) { const line = raw.trim(); if (!line || line.startsWith("#")) continue; const m = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/); if (!m) continue; let v = m[2].trim(); if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1); if (process.env[m[1]] === undefined) { process.env[m[1]] = v; n++; } }
+  let n = 0; for (const raw of text.split(/\r?\n/)) { const line = raw.trim(); if (!line || line.startsWith("#")) continue; const m = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/); if (!m) continue; let v = m[2].trim(); if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1); if (process.env[m[1]] === undefined) { process.env[m[1]] = v; n++; } }
   return n;
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  if (env === process.env) loadDotEnv();
-  const parsed = Env.safeParse(env);
-  if (!parsed.success) throw new Error(`configuration invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
-  const c = parsed.data;
+  if (env === process.env) loadDotEnv(); const parsed = Env.safeParse(env); if (!parsed.success) throw new Error(`configuration invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`); const c = parsed.data;
   return { ...c, isProduction: c.ENVIRONMENT === "production", isLocal: c.ENVIRONMENT === "local", outboundAllowlist: c.OUTBOUND_ALLOWLIST.split(",").map((s) => s.trim()).filter(Boolean) };
 }
-
-/** Fail-fast rules per environment. Returns problems (empty = ok). */
 export function validateConfig(c: Config): string[] {
   const p: string[] = [];
-  if (!c.isLocal) {
-    if (!c.DATA_KEY || c.DATA_KEY.length < 24) p.push("DATA_KEY must be set (>= 24 chars) outside local");
-    if (!c.AUDIT_SIGNING_KEY) p.push("AUDIT_SIGNING_KEY must be set outside local");
-    if (c.BOOTSTRAP_ADMIN_EMAIL && c.BOOTSTRAP_ADMIN_PASSWORD.length < 14) p.push("BOOTSTRAP_ADMIN_PASSWORD must be >= 14 chars");
-  }
-  if (c.isProduction) {
-    if (c.WHATSAPP_PROVIDER !== "cloud-api") p.push("production requires WHATSAPP_PROVIDER=cloud-api");
-    if (c.EXTRACTOR === "simulator") p.push("EXTRACTOR=simulator is forbidden in production");
-    if (c.ENVIRONMENT === "production" && c.SEED_ON_BOOT === "true") p.push("SEED_ON_BOOT is forbidden in production");
-  } else if (c.ENVIRONMENT === "staging" && c.EXTRACTOR === "simulator") p.push("EXTRACTOR=simulator is forbidden in staging");
+  if (!c.isLocal) { if (!c.DATA_KEY || c.DATA_KEY.length < 24) p.push("DATA_KEY must be set (>= 24 chars) outside local"); if (!c.AUDIT_SIGNING_KEY) p.push("AUDIT_SIGNING_KEY must be set outside local"); if (c.BOOTSTRAP_ADMIN_EMAIL && c.BOOTSTRAP_ADMIN_PASSWORD.length < 14) p.push("BOOTSTRAP_ADMIN_PASSWORD must be >= 14 chars"); }
+  if (c.isProduction) { if (c.WHATSAPP_PROVIDER !== "cloud-api") p.push("production requires WHATSAPP_PROVIDER=cloud-api"); if (c.EXTRACTOR === "simulator") p.push("EXTRACTOR=simulator is forbidden in production"); if (c.SEED_ON_BOOT === "true") p.push("SEED_ON_BOOT is forbidden in production"); if (c.STORAGE_DRIVER !== "s3") p.push("production requires STORAGE_DRIVER=s3 for durable media"); if (!c.S3_ACCESS_KEY_ID || !c.S3_SECRET_ACCESS_KEY) p.push("production s3 storage requires S3 credentials"); }
+  else if (c.ENVIRONMENT === "staging" && c.EXTRACTOR === "simulator") p.push("EXTRACTOR=simulator is forbidden in staging");
   if (c.WHATSAPP_PROVIDER === "cloud-api" && (!c.META_ACCESS_TOKEN || !c.META_APP_SECRET || !c.META_VERIFY_TOKEN || !c.META_PHONE_NUMBER_ID)) p.push("cloud-api requires META_ACCESS_TOKEN, META_APP_SECRET, META_VERIFY_TOKEN, META_PHONE_NUMBER_ID");
   if (c.EXTRACTOR.startsWith("anthropic") && !c.ANTHROPIC_API_KEY) p.push("anthropic extractor requires ANTHROPIC_API_KEY");
   if (c.CRM_PROVIDER === "http-contract" && !c.CRM_BASE_URL) p.push("http-contract CRM requires CRM_BASE_URL");
-  if (c.STORAGE_DRIVER === "s3" && !c.S3_BUCKET) p.push("s3 storage requires S3_BUCKET");
+  if (c.STORAGE_DRIVER === "s3" && (!c.S3_BUCKET || !c.S3_REGION)) p.push("s3 storage requires S3_BUCKET and S3_REGION");
   return p;
 }

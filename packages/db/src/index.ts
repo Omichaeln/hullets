@@ -9,26 +9,20 @@ export * as schema from "./schema.ts";
 export type Db = NodePgDatabase<typeof schema>;
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type DbOrTx = Db | Tx;
-
 export const MIGRATIONS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
-export function createPool(url: string, { max = 10 } = {}) {
-  return new pg.Pool({ connectionString: url, max, application_name: "promo-engine", statement_timeout: 30_000 });
+export function createPool(url: string, options: { max?: number; statementTimeoutMs?: number; connectionTimeoutMs?: number } = {}) {
+  return new pg.Pool({
+    connectionString: url,
+    max: options.max ?? 10,
+    statement_timeout: options.statementTimeoutMs ?? 30_000,
+    connectionTimeoutMillis: options.connectionTimeoutMs ?? 5_000,
+    idleTimeoutMillis: 30_000,
+    maxUses: 10_000,
+    application_name: process.env.SERVICE_NAME ?? "promo-engine",
+  });
 }
 export function createDb(pool: pg.Pool): Db { return drizzle(pool, { schema, casing: "snake_case" }); }
-
-/** Apply committed SQL migrations (drizzle-kit generated) inside a transaction each; idempotent. */
 export async function migrate(db: Db) { await drizzleMigrate(db, { migrationsFolder: MIGRATIONS_DIR, migrationsTable: "drizzle_migrations" }); }
-
-/** Create a database if missing (local/test convenience; requires createdb rights on the maintenance DB). */
-export async function ensureDatabase(url: string) {
-  const u = new URL(url); const name = u.pathname.replace(/^\//, ""); u.pathname = "/postgres";
-  const c = new pg.Client({ connectionString: u.toString() }); await c.connect();
-  try { const r = await c.query("select 1 from pg_database where datname=$1", [name]); if (!r.rowCount) await c.query(`create database "${name.replace(/"/g, '""')}"`); return !r.rowCount; }
-  finally { await c.end(); }
-}
-export async function dropDatabase(url: string) {
-  const u = new URL(url); const name = u.pathname.replace(/^\//, ""); u.pathname = "/postgres";
-  const c = new pg.Client({ connectionString: u.toString() }); await c.connect();
-  try { await c.query(`drop database if exists "${name.replace(/"/g, '""')}" with (force)`); } finally { await c.end(); }
-}
+export async function ensureDatabase(url: string) { const u = new URL(url); const name = u.pathname.replace(/^\//, ""); u.pathname = "/postgres"; const c = new pg.Client({ connectionString: u.toString() }); await c.connect(); try { const r = await c.query("select 1 from pg_database where datname=$1", [name]); if (!r.rowCount) await c.query(`create database "${name.replace(/"/g, '""')}"`); return !r.rowCount; } finally { await c.end(); } }
+export async function dropDatabase(url: string) { const u = new URL(url); const name = u.pathname.replace(/^\//, ""); u.pathname = "/postgres"; const c = new pg.Client({ connectionString: u.toString() }); await c.connect(); try { await c.query(`drop database if exists "${name.replace(/"/g, '""')}" with (force)`); } finally { await c.end(); } }

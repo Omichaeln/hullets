@@ -7,7 +7,7 @@ import { AuthService } from "./auth/service.ts";
 import { CampaignService } from "./campaign/service.ts";
 import { ParticipantService } from "./participant/service.ts";
 import { ConversationEngine } from "./conversation/engine.ts";
-import { FsStorage, UnavailableStorage, type StorageDriver } from "./media/storage.ts";
+import { FsStorage, S3Storage, type StorageDriver } from "./media/storage.ts";
 import { MediaService } from "./media/service.ts";
 import { createExtractor, type Extractor } from "./extraction/index.ts";
 import { ReceiptPipeline } from "./receipt/pipeline.ts";
@@ -30,7 +30,7 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   const cfg = opts.config ?? loadConfig();
   const problems = validateConfig(cfg); if (problems.length) throw new Error(`configuration invalid: ${problems.join("; ")}`);
   const log = opts.log ?? (cfg.ENVIRONMENT === "test" ? silentLogger() : createLogger(cfg.LOG_LEVEL));
-  const pool = createPool(cfg.DATABASE_URL); const db: Db = createDb(pool);
+  const pool = createPool(cfg.DATABASE_URL, { max: cfg.DB_POOL_MAX, statementTimeoutMs: cfg.DB_STATEMENT_TIMEOUT_MS, connectionTimeoutMs: cfg.DB_CONNECTION_TIMEOUT_MS }); const db: Db = createDb(pool);
   if (opts.migrate !== false) await migrate(db);
   await db.insert(schema.schemaMeta).values({ key: "environment", value: cfg.ENVIRONMENT }).onConflictDoNothing();
   const [envRow] = await db.select().from(schema.schemaMeta).where(eq(schema.schemaMeta.key, "environment")); const environment = envRow?.value ?? cfg.ENVIRONMENT;
@@ -41,7 +41,7 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   if (cfg.BOOTSTRAP_ADMIN_EMAIL && cfg.BOOTSTRAP_ADMIN_PASSWORD) await auth.bootstrap(cfg.BOOTSTRAP_ADMIN_EMAIL, cfg.BOOTSTRAP_ADMIN_PASSWORD);
   const campaigns = new CampaignService(db, audit);
   const participants = new ParticipantService(db, audit, cfg.DATA_KEY, cfg.DEFAULT_COUNTRY_CODE);
-  const storage = opts.storage ?? (cfg.STORAGE_DRIVER === "fs" ? new FsStorage(path.resolve(cfg.MEDIA_ROOT)) : new UnavailableStorage(cfg.STORAGE_DRIVER));
+  const storage = opts.storage ?? (cfg.STORAGE_DRIVER === "fs" ? new FsStorage(path.resolve(cfg.MEDIA_ROOT)) : new S3Storage(cfg.S3_BUCKET, cfg.S3_PREFIX, { endpoint: cfg.S3_ENDPOINT, region: cfg.S3_REGION, accessKeyId: cfg.S3_ACCESS_KEY_ID, secretAccessKey: cfg.S3_SECRET_ACCESS_KEY }));
   const media = new MediaService(db, storage, cfg.RETENTION_MEDIA_DAYS);
   const extractor = opts.extractor ?? createExtractor(cfg);
   const signals = new OpsSignals(db); const queue = new QueueService(db); const outbox = new OutboxService(db);
