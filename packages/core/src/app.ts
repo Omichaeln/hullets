@@ -45,7 +45,7 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   const storage = opts.storage ?? (cfg.STORAGE_DRIVER === "fs" ? new FsStorage(path.resolve(cfg.MEDIA_ROOT)) : new S3Storage(cfg.S3_BUCKET, cfg.S3_PREFIX, { endpoint: cfg.S3_ENDPOINT, region: cfg.S3_REGION, accessKeyId: cfg.S3_ACCESS_KEY_ID, secretAccessKey: cfg.S3_SECRET_ACCESS_KEY }));
   const media = new MediaService(db, storage, cfg.RETENTION_MEDIA_DAYS);
   const extractor = opts.extractor ?? createExtractor(cfg);
-  const verifier = new AiVerificationService({ enabled: cfg.aiVerificationEnabled, required: cfg.aiVerificationRequired, apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.AI_VERIFICATION_MODEL, baseURL: cfg.ANTHROPIC_BASE_URL, timeoutMs: cfg.AI_VERIFICATION_TIMEOUT_MS, minProbability: cfg.AI_VERIFICATION_MIN_PROBABILITY, maxRisk: "low" });
+  const verifier = new AiVerificationService({ provider: cfg.AI_VERIFICATION_PROVIDER, enabled: cfg.aiVerificationEnabled, required: cfg.aiVerificationRequired, apiKey: cfg.AI_VERIFICATION_PROVIDER === "openai" ? cfg.OPENAI_API_KEY : cfg.ANTHROPIC_API_KEY, model: cfg.AI_VERIFICATION_MODEL, baseURL: cfg.AI_VERIFICATION_PROVIDER === "openai" ? cfg.OPENAI_BASE_URL : cfg.ANTHROPIC_BASE_URL, timeoutMs: cfg.AI_VERIFICATION_TIMEOUT_MS, minProbability: cfg.AI_VERIFICATION_MIN_PROBABILITY, maxRisk: "low" });
   const signals = new OpsSignals(db); const queue = new QueueService(db); const outbox = new OutboxService(db);
   const crmAdapter = opts.crmAdapter ?? (cfg.CRM_PROVIDER === "http-contract" ? new HttpContractAdapter(cfg.CRM_BASE_URL, cfg.CRM_TOKEN, cfg.CRM_TIMEOUT_MS) : new NoCrmAdapter());
   const crm = new CrmService(db, crmAdapter, environment, signals); participants.crm = crm;

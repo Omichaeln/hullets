@@ -1,6 +1,6 @@
 # ADR 0009: AI verification as a conservative advisory layer
 
-- **Status:** implemented as disabled-by-default advisory infrastructure
+- **Status:** implemented with OpenAI provider support; production enablement is an explicit configuration change
 - **Date:** 2026-09-19
 - **Decision owners:** Engineering, campaign operations, and fraud/risk owner
 
@@ -12,7 +12,7 @@ A model self-reported confidence is not a calibrated probability. Production aut
 
 ## Decision
 
-Add a separate `AiVerificationService` after OCR, QR enrichment, deterministic evaluation, and duplicate-signal collection. The service receives the original receipt image plus bounded structured facts, deterministic rule results, campaign-rule summary, QR provenance, and exact/visual duplicate counts. It uses a forced structured tool response and records:
+Add a separate `AiVerificationService` after OCR, QR enrichment, deterministic evaluation, and duplicate-signal collection. The selected provider is **OpenAI** through the Chat Completions vision API; Anthropic remains available as an alternative. The service receives the original receipt image plus bounded structured facts, deterministic rule results, campaign-rule summary, QR provenance, and exact/visual duplicate counts. It uses strict structured JSON output and records:
 
 - provider, model, prompt version, and latency;
 - dimensions with `pass`, `fail`, `warning`, or `not_checkable` outcomes and bounded evidence;
@@ -27,9 +27,11 @@ Human review sees the original receipt, OCR/normalized facts, deterministic rule
 
 ## Configuration
 
+- `AI_VERIFICATION_PROVIDER=openai` selects OpenAI; `AI_VERIFICATION_PROVIDER=anthropic` is retained as an alternative.
+- `OPENAI_API_KEY` supplies the OpenAI credential; `OPENAI_BASE_URL` can target an OpenAI-compatible endpoint.
 - `AI_VERIFICATION_ENABLED=false` keeps the service disabled.
 - `AI_VERIFICATION_REQUIRED=false` avoids making the external model a hard availability dependency during the calibration phase.
-- `AI_VERIFICATION_MODEL` selects the model and reuses `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`.
+- `AI_VERIFICATION_MODEL` selects the vision model and defaults to `gpt-4o-mini` for OpenAI.
 - `AI_VERIFICATION_TIMEOUT_MS` bounds the request.
 - `AI_VERIFICATION_MIN_PROBABILITY` is a conservative uncalibrated-signal hold threshold only; it must not be presented as a probability until calibrated.
 
