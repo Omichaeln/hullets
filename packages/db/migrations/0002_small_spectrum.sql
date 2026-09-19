@@ -1,0 +1,1 @@
+CREATE INDEX "ix_participant_channel_uid" ON "participants" USING btree ("channel_uid");

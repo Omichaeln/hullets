@@ -77,7 +77,7 @@ export const participants = pgTable("participants", {
   id: text("id").primaryKey(), channel: text("channel").notNull().default("whatsapp"), channelUid: text("channel_uid").notNull(), firstName: text("first_name").notNull(), surname: text("surname").notNull().default(""),
   location: text("location"), identityEnc: text("identity_enc"), identityMask: text("identity_mask"), identityFp: text("identity_fp"), identityVerifiedAt: ts("identity_verified_at"),
   status: text("status").notNull().default("active"), version: integer("version").notNull().default(1), createdAt: created(), updatedAt: ts("updated_at").notNull().defaultNow(),
-}, (t) => [uniqueIndex("uq_participant_channel").on(t.channel, t.channelUid), index("ix_participant_fp").on(t.identityFp)]);
+}, (t) => [uniqueIndex("uq_participant_channel").on(t.channel, t.channelUid), index("ix_participant_channel_uid").on(t.channelUid), index("ix_participant_fp").on(t.identityFp)]);
 
 export const enrollments = pgTable("enrollments", {
   id: text("id").primaryKey(), participantId: text("participant_id").notNull().references(() => participants.id), campaignId: text("campaign_id").notNull().references(() => campaigns.id),

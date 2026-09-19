@@ -15,6 +15,13 @@
       "when": 1789568169939,
       "tag": "0001_campaign_description",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789832910990,
+      "tag": "0002_small_spectrum",
+      "breakpoints": true
     }
   ]
 }
