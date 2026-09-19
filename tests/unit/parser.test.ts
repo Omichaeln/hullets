@@ -22,6 +22,7 @@ describe("receipt text parser", () => {
   });
   it("line item layouts: desc+qty line, inline qty, leading qty, per-unit lines, void", () => {
     expect(parseLines(["SWEETVALE BROWN SUGAR 2KG", "2 x 3.10 6.20"])[0]).toMatchObject({ quantity: 2, amountMinor: 620, unitMinor: 310 });
+    expect(parseLines(["SUNSWEET BROWN SUGAR - 2KG", "2 43.52 87.04"])[0]).toMatchObject({ description: "SUNSWEET BROWN SUGAR - 2KG", quantity: 2, packGrams: 2000 });
     expect(parseLines(["SWEETVALE BROWN SUGAR 2KG 2 @ 3.10 6.20"])[0]).toMatchObject({ quantity: 2 });
     expect(parseLines(["2 x BROWN SUGAR 2KG 6.20"])[0]).toMatchObject({ quantity: 2, packGrams: 2000 });
     expect(parseLines(["SWEETVALE BROWN SUGAR 2KG 3.10", "SWEETVALE BROWN SUGAR 2KG 3.10"]).length).toBe(2);

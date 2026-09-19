@@ -71,6 +71,15 @@ export function parseLines(raw: string[]): LineFact[] {
     const lead = l.match(QTY_LEAD); if (lead && HAS_WORD.test(l.slice(lead[0].length))) { const rest = l.slice(lead[0].length); const dp = rest.match(DESC_PRICE); push(dp ? dp[1] : rest, +lead[1], null, dp ? dp[2] : null, l); continue; }
     m = l.match(DESC_PRICE);
     if (m && !/^\d/.test(l)) { const q = next.match(QTY_LINE); if (q) { push(m[1], +q[1], q[2], q[3] ?? m[2], `${l} | ${next}`); i++; } else push(m[1], 1, null, m[2], l); continue; }
+    // Some fiscal printers put the product description on one row and the
+    // quantity/unit/amount values on the next row. Only consume this shape
+    // when the description contains a pack size and the following row has a
+    // quantity plus additional numeric evidence; a lone price such as 15.50
+    // must not become a quantity of 15.
+    if (packGrams(l) != null) {
+      const q = next.match(/^(\d{1,3})(?=\s|$)/); const tail = q ? next.slice(q[0].length).trim() : "";
+      if (q && !QTY_LINE.test(next) && /\d/.test(tail)) { push(l, +q[1], null, null, `${l} | ${next}`); i++; continue; }
+    }
     if (HAS_WORD.test(l) && !/\d+[.,]\d{2}\s*$/.test(l)) { const q = next.match(QTY_LINE); if (q) { push(l, +q[1], q[2], q[3] ?? null, `${l} | ${next}`); i++; } }
   }
   // a VOID/REFUND line cancels the nearest preceding item it names (or the previous item)
