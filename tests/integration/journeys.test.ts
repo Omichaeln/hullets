@@ -29,7 +29,7 @@ describe("participant journeys", () => {
     await h.say(P1, "1"); const pick = await h.say(P1, "1"); expect(pick.result?.state).toBe("RECEIPT"); expect(pick.replies[0]).toMatch(/Outlet: Baobab Stores —/);
     await h.say(P1, "back"); const s = await h.say(P1, "westgate"); expect(s.result?.state).toBe("OUTLET"); expect((s.replies[0].match(/\n\d\./g) ?? []).length).toBeGreaterThanOrEqual(3);
     expect((await h.say(P1, "zzzz-nowhere")).replies[0]).toMatch(/No branch matched/); expect((await h.say(P1, "42")).replies[0]).toMatch(/one of the numbers/);
-    await h.say(P1, "mopani westgate harare"); const ok = await h.say(P1, "1"); expect(ok.result?.state).toBe("RECEIPT");
+    await h.say(P1, "mopani westgate harare"); const candidate = await h.say(P1, "1"); expect(candidate.result?.state).toBe("OUTLET_CONFIRM"); expect(candidate.replies[0]).toMatch(/Is this where you bought it/); expect((await h.say(P1, "no")).replies[0]).toMatch(/Type the shop/); await h.say(P1, "mopani westgate harare"); const confirmed = await h.say(P1, "1"); expect(confirmed.result?.state).toBe("OUTLET_CONFIRM"); const ok = await h.say(P1, "yes"); expect(ok.result?.state).toBe("RECEIPT");
     const ses = (await h.app.conversation.session(h.campaign.id, P1))!; expect((ses.context as { outletId: string }).outletId).toBe("out_MOP-HRE-01");
     expect((await h.app.campaigns.campaignOutlets(h.campaign.id)).length).toBe(80);
     expect((await h.say(P1, "hello there")).replies[0]).toMatch(/PHOTO of your receipt/); expect((await h.say(P1, "", { kind: "unsupported" })).replies[0]).toMatch(/PHOTO of your receipt/);

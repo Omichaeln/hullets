@@ -35,6 +35,7 @@ describe("receipt text parser", () => {
     expect(matchOutlets("Corner Tuckshop Unit L Harare", outlets).every((c) => c.score < 0.5)).toBe(true);
     expect(matchOutlets("Baobab Stores", outlets).find((c) => c.outletId === "b")?.score).toBe(0.4);
     expect(matchProduct("SWEETVALE BROWN SUGAR 2KG", [{ code: "X", name: "Sweetvale Brown Sugar 2kg", aliases: [], packGrams: 2000, qualifying: true }])?.code).toBe("X");
+    expect(matchProduct("SUNSWEET BROWN SUGAR 2KG", [{ code: "SUNSWEET-BROWN-2KG", name: "SUNSWEET BROWN SUGAR - 2KG", aliases: ["sunsweet brown sugar"], packGrams: 2000, qualifying: true }])?.code).toBe("SUNSWEET-BROWN-2KG");
     expect(matchProduct("WHITE SUGAR 2KG", [{ code: "X", name: "Sweetvale Brown Sugar 2kg", aliases: ["brown sugar"], packGrams: 2000, qualifying: true }])).toBeNull();
   });
 });

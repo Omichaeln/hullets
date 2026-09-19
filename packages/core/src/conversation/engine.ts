@@ -152,8 +152,15 @@ export class ConversationEngine {
     const selectOutlet = async (id: string) => {
       const o = (await campaigns.campaignOutlets(cid)).find((x) => x.id === id);
       if (!o) return reply(state, render(M, "outlet_pick_number"));
-      await save("RECEIPT", { ...ctx, nav: undefined, outletId: o.id, outletLabel: outletLabel(o) });
-      return reply("RECEIPT", render(M, "outlet_confirmed", { outlet: outletLabel(o) }));
+      const label = outletLabel(o);
+      await save("OUTLET_CONFIRM", { ...ctx, nav: undefined, outletId: o.id, outletLabel: label });
+      return reply("OUTLET_CONFIRM", render(M, "outlet_verify", { outlet: label }));
+    };
+    const outletConfirmation = async (): Promise<ConversationResult> => {
+      const label = ctx.outletLabel ?? "the selected outlet";
+      if (intent === "YES") { await save("RECEIPT", { ...ctx }); return reply("RECEIPT", render(M, "outlet_confirmed", { outlet: label })); }
+      if (intent === "NO" || intent === "BACK") { await save("OUTLET", { ...ctx, nav: undefined, outletId: undefined, outletLabel: undefined }); return reply("OUTLET", render(M, "outlet_verify_no")); }
+      return reply("OUTLET_CONFIRM", render(M, "outlet_verify_retry", { outlet: label }));
     };
     const outletFlow = async (): Promise<ConversationResult> => {
       const nav = ctx.nav;
@@ -236,6 +243,7 @@ export class ConversationEngine {
       }
       case "REG_NAME": case "REG_SURNAME": case "REG_ID": case "REG_LOCATION": case "REG_CONFIRM": case "REG_TERMS": return registration();
       case "OUTLET": return outletFlow();
+      case "OUTLET_CONFIRM": return outletConfirmation();
       case "RECEIPT": return receiptFlow();
       case "WINNERS": return this.winnersFlow({ cid, M, ctx, state, number, fresh: intent === "WINNERS", save, reply });
       default: return home();

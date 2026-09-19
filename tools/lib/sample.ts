@@ -16,7 +16,7 @@ export function sampleOutlets() {
   RETAILERS.forEach(([retailer, rc], ri) => TOWNS.forEach(([town, tc, region], ti) => { const branch = ti === 0 && ri < 3 ? "Westgate" : BRANCHES[(ri + ti) % BRANCHES.length]; out.push({ code: `${rc}-${tc}-${String(ti + 1).padStart(2, "0")}`, retailer, branch, town, region, aliases: [`${retailer.split(" ")[0]} ${branch}`], collectionPoint: (ri + ti) % 3 === 0, sample: true }); }));
   return out;
 }
-export const SAMPLE_PRODUCTS = [{ code: "SV-BS-2KG", name: "Sweetvale Brown Sugar 2kg", aliases: ["sweetvale brown sugar", "brown sugar 2kg", "sv brown sugar", "sweetvale brn sugar"], packGrams: 2000, qualifying: true }, { code: "SV-BS-1KG", name: "Sweetvale Brown Sugar 1kg", aliases: ["brown sugar 1kg", "sweetvale brn sugar 1kg"], packGrams: 1000, qualifying: true }];
+export const SAMPLE_PRODUCTS = [{ code: "SV-BS-2KG", name: "Sweetvale Brown Sugar 2kg", aliases: ["sweetvale brown sugar", "brown sugar 2kg", "sv brown sugar", "sweetvale brn sugar"], packGrams: 2000, qualifying: true }, { code: "SV-BS-1KG", name: "Sweetvale Brown Sugar 1kg", aliases: ["brown sugar 1kg", "sweetvale brn sugar 1kg"], packGrams: 1000, qualifying: true }, { code: "SUNSWEET-BROWN-2KG", name: "SUNSWEET BROWN SUGAR - 2KG", aliases: ["sunsweet brown sugar", "sunsweet brown sugar 2kg", "sunsweet brown sugar 2 kg", "sunsweet 2kg"], packGrams: 2000, qualifying: true }];
 export const DECISIONS: Record<string, [string, string]> = {
   "D-01": ["Final campaign name and sponsoring brand", "TEST ONLY — Sweetvale Brown Sugar Promotion (fictional brand)"],
   "D-02": ["Exact start/end, entry cutoff, draw and publication dates and timezone", "seed-clock relative weeks; Monday 00:00 Africa/Harare cutoffs (test assumption)"],
