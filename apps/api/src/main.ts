@@ -24,7 +24,7 @@ if (workerOnly) {
   for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void stop(sig));
 } else {
   const http = createHttpServer(app);
-  const server = http.listen(app.cfg.PORT, app.cfg.HOST, () => app.log.info({ host: app.cfg.HOST, port: app.cfg.PORT, environment: app.environment, transport: app.transport.provider, extractor: app.extractor.name, worker: app.cfg.WORKER_MODE }, "hullets api listening"));
+  const server = http.listen(app.cfg.PORT, app.cfg.HOST, () => app.log.info({ host: app.cfg.HOST, port: app.cfg.PORT, environment: app.environment, transport: app.transport.provider, extractor: app.extractor.name, worker: app.cfg.WORKER_MODE, release: process.env.RAILWAY_GIT_COMMIT_SHA ?? "unknown" }, "hullets api listening"));
   if (app.cfg.WORKER_MODE === "embedded") app.worker.start();
   for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => {
     app.log.info({ sig }, "api shutting down");
