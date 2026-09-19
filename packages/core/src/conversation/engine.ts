@@ -266,7 +266,7 @@ export class ConversationEngine {
           // A further photo after a submission (or a re-upload request) reuses the outlet the participant chose; the
           // acknowledgement names it and says how to change it. The header cross-check still catches a wrong shop.
           if (participant && enrollment && !enrollment.withdrawnAt && ctx.outletId && ctx.lastSubmissionId && !controls.pauseIntake && campaign.status === "active") return receiptFlow({ remembered: true });
-          return reply("HOME", [render(M, "need_photo"), menu()]);
+          return reply("HOME", [render(M, returning ? "image_home_returning" : "image_home_new"), returning ? returningMenu() : menu()]);
         }
         if (intent === "BACK") return home();
         return reply("HOME", render(M, "unknown", { menu: menu() }));

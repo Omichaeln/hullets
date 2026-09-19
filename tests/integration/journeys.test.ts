@@ -22,6 +22,15 @@ describe("participant journeys", () => {
     const returning = await h.say(P1, "hello"); expect(returning.replies[0]).toMatch(/Hello Tendai, welcome back/); expect(returning.replies[0]).toMatch(/1\. Enter another receipt/); expect(returning.replies[0]).toMatch(/2\. Continue an unfinished entry/); expect(returning.replies[0]).toMatch(/3\. View my entries/); expect((await h.say(P1, "2")).replies[0]).toMatch(/no unfinished entry/i); expect((await h.say(P1, "8")).replies[0]).toMatch(/update them now/i); await h.say(P1, "menu");
     expect((await h.db.select().from(schema.participants).where(eq(schema.participants.channelUid, P1))).length).toBe(1);
   });
+  it("a returning participant who sends a photo from HOME is told to choose a shop instead of seeing registration guidance", async () => {
+    const before = (await h.db.select().from(schema.submissions)).length;
+    const r = await h.say(P1, "", { image: await h.simImage("receipt sent before outlet selection") });
+    expect(r.result?.state).toBe("HOME");
+    expect(r.replies[0]).toMatch(/after you choose the shop/i);
+    expect(r.replies[0]).toMatch(/reply 1 to enter another receipt/i);
+    expect(r.replies[1]).toMatch(/1\. Enter another receipt/);
+    expect((await h.db.select().from(schema.submissions)).length).toBe(before);
+  });
   it("T-03: outlet selection covers all 80 branches by shop, pages, search and Back, and always ends in a canonical id", async () => {
     const r1 = await h.say(P1, "1"); expect(r1.result?.state).toBe("OUTLET"); expect(r1.replies[0]).toMatch(/1\. Baobab Stores/); expect(r1.replies[0]).toMatch(/8\. Savanna Grocer/);
     const r2 = await h.say(P1, "1"); expect(r2.replies[0]).toMatch(/Baobab Stores: choose the BRANCH/); expect(r2.replies[0]).toMatch(/9\. More/);
