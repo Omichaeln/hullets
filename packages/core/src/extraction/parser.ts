@@ -59,7 +59,7 @@ const QTY_LEAD = /^(\d{1,3})\s*(?:x|@|\*|×)\s*/i;
 const INLINE = /^(.*?[A-Za-z]{3,}.*?)\s+(\d{1,3})\s*(?:x|@|\*|×)\s*(\d+[.,]\d{2})\s*=?\s*(\d+[.,]\d{2})\s*$/i;
 const INLINE_QTY_ONLY = /^(.*?[A-Za-z]{3,}.*?)\s+(?:qty\s*[:.]?\s*)?(\d{1,3})\s*(?:x|×)\s*(\d+[.,]\d{2})\s*$/i;
 const DESC_PRICE = /^(.*?[A-Za-z]{3,}.*?)\s+(\d{1,6}[.,]\d{2})\s*[A-Z]?\s*$/;
-const QTY_LINE = /^(?:qty\s*[:.]?\s*)?(\d{1,3})\s*(?:x|@|\*|×)\s*(\d+[.,]\d{2})(?:\s*=?\s*(\d+[.,]\d{2}))?\s*$/i;
+const QTY_LINE = /^(?:qty\s*[:.]?\s*)?(\d{1,3})\s*(?:(?:x|@|\*|×)|(?:each\s*@))\s*(\d+[.,]\d{2})(?:\s*=?\s*(\d+[.,]\d{2}))?\s*$/i;
 export function parseLines(raw: string[]): LineFact[] {
   const lines = raw.map(cleanLine).filter(Boolean); const items: LineFact[] = [];
   const push = (desc: string, qty: number | null, unit: string | null, amount: string | null, src: string) => { const description = desc.replace(/\s+/g, " ").trim(); items.push({ n: items.length + 1, raw: src, description, quantity: qty != null && qty > 0 && qty < 1000 ? qty : null, packGrams: packGrams(description), unitMinor: money(unit), amountMinor: money(amount), voided: VOID.test(src), product: null }); };

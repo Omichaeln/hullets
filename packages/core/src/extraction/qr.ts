@@ -103,6 +103,34 @@ async function fetchFiscalUrl(rawUrl: string, cfg: QrFetchConfig): Promise<QrFet
   }
 }
 
+function reviewInvoiceUrl(body: Buffer, contentType: string, base: URL) {
+  if (!contentType.includes("html")) return null;
+  const html = body.toString("utf8");
+  for (const match of html.matchAll(/<form\b[^>]*>[\s\S]*?<\/form>/gi)) {
+    const form = match[0];
+    if (!/review\s+invoice/i.test(form)) continue;
+    const actionMatch = form.match(/\baction\s*=\s*["']([^"']+)["']/i);
+    if (!actionMatch) continue;
+    const url = new URL(decodeEntities(actionMatch[1]), base);
+    for (const input of form.matchAll(/<input\b[^>]*>/gi)) {
+      const tag = input[0];
+      const name = tag.match(/\bname\s*=\s*["']([^"']+)["']/i)?.[1];
+      const value = tag.match(/\bvalue\s*=\s*["']([^"']*)["']/i)?.[1];
+      if (name && value != null) url.searchParams.set(decodeEntities(name), decodeEntities(value));
+    }
+    return url;
+  }
+  return null;
+}
+
+async function fetchFiscalDocument(rawUrl: string, cfg: QrFetchConfig, fetcher: (url: string, cfg: QrFetchConfig) => Promise<QrFetchedDocument>) {
+  const initial = await fetcher(rawUrl, cfg);
+  const review = reviewInvoiceUrl(initial.body, initial.contentType, initial.url);
+  if (!review) return { document: initial, warning: null as string | null };
+  try { return { document: await fetcher(review.toString(), cfg), warning: null as string | null }; }
+  catch { return { document: initial, warning: "review_fetch_failed" }; }
+}
+
 function decodeEntities(text: string) { return text.replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16))); }
 function digitalText(body: Buffer, contentType: string) {
   const text = body.toString("utf8");
@@ -176,7 +204,7 @@ export async function enrichWithQrFallback(input: { facts: Facts; original: Buff
   if (!candidate) { evidence.status = "no_code"; if (codes.length) evidence.warnings.push("barcode_without_https_fiscal_url"); return { facts: attach(input.facts), evidence }; }
   evidence.format = candidate.format; evidence.codeSha256 = candidate.rawSha256;
   try {
-    const fetched = await (input.fetcher ?? fetchFiscalUrl)(candidate.text, input.fetch); const text = digitalText(fetched.body, fetched.contentType); const digital = parseReceiptText(text, input.context, { provider: "qr-fiscal", model: `${DECODER_VERSION}/text-parser`, promptVersion: "qr-fiscal/1", confidence: 1, raw: { documentSha256: sha256(fetched.body), contentType: fetched.contentType } });
+    const fetchedResult = await fetchFiscalDocument(candidate.text, input.fetch, input.fetcher ?? fetchFiscalUrl); const fetched = fetchedResult.document; if (fetchedResult.warning) evidence.warnings.push(fetchedResult.warning); const text = digitalText(fetched.body, fetched.contentType); const digital = parseReceiptText(text, input.context, { provider: "qr-fiscal", model: `${DECODER_VERSION}/text-parser`, promptVersion: "qr-fiscal/1", confidence: 1, raw: { documentSha256: sha256(fetched.body), contentType: fetched.contentType } });
     evidence.urlHost = new URL(candidate.text).hostname; evidence.urlPath = new URL(candidate.text).pathname.slice(0, 512); evidence.queryKeys = queryKeys(new URL(candidate.text)); evidence.finalHost = fetched.url.hostname; evidence.finalPath = fetched.url.pathname.slice(0, 512); evidence.contentType = fetched.contentType; evidence.documentSha256 = sha256(fetched.body); evidence.fetchedAt = new Date().toISOString();
     return { facts: mergeFacts(input.facts, digital, evidence), evidence };
   } catch (e) {

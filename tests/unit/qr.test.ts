@@ -37,6 +37,26 @@ const code = (text: string) => ({ format: "QR_CODE", text, rawSha256: "code-hash
     expect(result.facts.quality.missing).not.toContain("line_items");
   });
 
+  it("follows a fiscal portal Review invoice form to recover ZIMRA product lines", async () => {
+    const calls: string[] = [];
+    const result = await enrichWithQrFallback({
+      facts: emptyFacts("tesseract", "test"), original: Buffer.from("receipt"), context, enabled: true, fetch: fetchConfig,
+      decoder: async () => [code("https://fdms.zimra.co.zw/qr/example")],
+      fetcher: async (url) => {
+        calls.push(url);
+        if (url.includes("/Receipt/Print")) return { url: new URL(url), contentType: "text/html", body: Buffer.from("<html><body>Invoice No: 384/151707<br>Date: 24/03/2026 18:08<br>Description<br>HULETTS BROWN SUGAR<br>2 each @ 91.20<br>Total ZWG 911.68</body></html>") };
+        return { url: new URL(url), contentType: "text/html", body: Buffer.from('<html><body>Invoice is valid<form action="/Receipt/Print" method="GET"><input hidden value="27703931" name="validationId"><input hidden value="lv1O3OFg" name="validationSecurityCode"><button>Review invoice</button></form></body></html>') };
+      },
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("/Receipt/Print?");
+    expect(result.evidence.status).toBe("parsed");
+    expect(result.facts.lines[0]?.product?.code).toBe("HULETTS-BROWN-2KG");
+    expect(result.facts.lines[0]?.quantity).toBe(2);
+    expect(result.facts.transaction.date).toBe("2026-03-24");
+    expect(result.facts.transaction.totalMinor).toBe(91168);
+  });
+
   it("does not perform QR work when OCR is already sufficient", async () => {
     const facts = emptyFacts("tesseract", "test", {
       document: { kind: "receipt", score: 0.9, signals: {} },

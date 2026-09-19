@@ -2,7 +2,7 @@
 
 ## What the feature does
 
-The receipt worker attempts QR/barcode fallback only when the configured OCR result is incomplete or low-confidence. A decoded HTTPS fiscal URL is fetched with SSRF protection, bounded timeout/size/redirect limits, and no JavaScript execution. The response is parsed using the existing receipt parser. It can fill missing receipt number, date, total, merchant, and line-item facts; it cannot override conflicting OCR facts or bypass eligibility and duplicate rules.
+The receipt worker attempts QR/barcode fallback only when the configured OCR result is incomplete or low-confidence. A decoded HTTPS fiscal URL is fetched with SSRF protection, bounded timeout/size/redirect limits, and no JavaScript execution. If the fiscal portal exposes a same-host **Review invoice** form, the worker follows that one bounded form action and parses the resulting digital invoice, which is important for ZIMRA validation pages whose product lines appear only on the review page. The response is parsed using the existing receipt parser. It can fill missing receipt number, date, total, merchant, and line-item facts; it cannot override conflicting OCR facts or bypass eligibility and duplicate rules.
 
 ## Reviewer interpretation
 
@@ -49,6 +49,6 @@ Do not log decoded URL values, receipt query strings, fetched receipt bodies, or
 
 If QR fallback is slow or increases backlog, set `QR_FALLBACK_ENABLED=false`, redeploy the API and worker, and allow existing queue items to drain. If one fiscal host fails, first confirm its public DNS, certificate, content type, redirects, and whether it requires a browser session. Add only the approved public hostname to `QR_ALLOWED_HOSTS`; never weaken SSRF checks.
 
-If a digital receipt disagrees with OCR, the disagreement warning intentionally routes the item toward review instead of silently selecting one source. A reviewer can correct readable facts using the existing audited correction action and then qualify with a required note where identity is incomplete.
+If a digital receipt disagrees with OCR, the disagreement warning intentionally routes the item toward review instead of silently selecting one source. A reviewer can correct readable facts using the existing audited correction action and then qualify with a required note where identity is incomplete. If a fiscal portal has a summary page plus a review form, inspect the final `parsed` evidence path and the extracted fields; a `parsed` status with no line items means the portal did not expose product details on the first page or the review follow-up failed.
 
 If the fallback is enabled but no evidence appears, verify that both API and worker are on the same release and that the worker is processing the queue. Existing submissions are not retroactively changed automatically; use the existing audited **Reprocess** action for a specific submission after confirming the reason.
