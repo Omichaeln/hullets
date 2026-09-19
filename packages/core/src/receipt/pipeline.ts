@@ -207,12 +207,21 @@ export class ReceiptPipeline {
       const facts = (last?.facts ?? {}) as { transaction?: { date?: string | null; receiptNo?: string | null; totalMinor?: number | null } };
       let canonicalId = s.canonicalReceiptId; let disposition: Disposition | "duplicate" = decision; let reason = reasonCode ?? "ok";
       if (decision === "qualified") {
-        const key = receiptKey(s.selectedOutletId, facts.transaction?.date ?? null, facts.transaction?.receiptNo ?? null);
-        if (!key) throw err("IDENTITY_INCOMPLETE", "cannot credit: outlet, date and receipt number must all be readable — correct the facts first");
-        const [can] = await tx.select().from(canonicalReceipts).where(and(eq(canonicalReceipts.campaignId, s.campaignId), eq(canonicalReceipts.receiptKey, key))).for("update");
-        if (can && can.status === "credited" && can.creditedSubmissionId !== submissionId) { disposition = "duplicate"; reason = "duplicate_receipt"; canonicalId = can.id; }
-        else if (!can) { canonicalId = newId("rcp"); await tx.insert(canonicalReceipts).values({ id: canonicalId, campaignId: s.campaignId, receiptKey: key, outletId: s.selectedOutletId, txnDate: facts.transaction?.date ?? null, receiptNo: facts.transaction?.receiptNo ?? null, totalMinor: facts.transaction?.totalMinor ?? null, firstSubmissionId: submissionId, status: "pending" }); }
-        else canonicalId = can.id;
+        const date = facts.transaction?.date ?? null, receiptNo = facts.transaction?.receiptNo ?? null, totalMinor = facts.transaction?.totalMinor ?? null;
+        const key = receiptKey(s.selectedOutletId, date, receiptNo);
+        if (!key) {
+          if (!note?.trim()) throw invalid("a reviewer note is required when qualifying with incomplete receipt identity");
+          // A human may qualify from the image even when OCR cannot produce a
+          // stable purchase key. Keep the award auditable, but do not invent
+          // an identity that could incorrectly merge this receipt with another.
+          canonicalId = newId("rcp"); reason = reasonCode ?? "manual_review_qualified";
+          await tx.insert(canonicalReceipts).values({ id: canonicalId, campaignId: s.campaignId, receiptKey: `manual-review:${submissionId}`, outletId: s.selectedOutletId, txnDate: date, receiptNo, totalMinor, firstSubmissionId: submissionId, status: "pending" });
+        } else {
+          const [can] = await tx.select().from(canonicalReceipts).where(and(eq(canonicalReceipts.campaignId, s.campaignId), eq(canonicalReceipts.receiptKey, key))).for("update");
+          if (can && can.status === "credited" && can.creditedSubmissionId !== submissionId) { disposition = "duplicate"; reason = "duplicate_receipt"; canonicalId = can.id; }
+          else if (!can) { canonicalId = newId("rcp"); await tx.insert(canonicalReceipts).values({ id: canonicalId, campaignId: s.campaignId, receiptKey: key, outletId: s.selectedOutletId, txnDate: date, receiptNo, totalMinor, firstSubmissionId: submissionId, status: "pending" }); }
+          else canonicalId = can.id;
+        }
       }
       await tx.update(reviewTasks).set({ state: "decided", decision: disposition, decisionReason: reason, note: note ?? null, decidedBy: reviewerId, decidedAt: new Date().toISOString(), version: sql`${reviewTasks.version} + 1` }).where(eq(reviewTasks.submissionId, submissionId));
       const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(extractions).where(eq(extractions.submissionId, submissionId));

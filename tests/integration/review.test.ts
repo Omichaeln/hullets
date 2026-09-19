@@ -33,6 +33,14 @@ describe("review and ledger operations", () => {
     await h.app.worker.drain(); const msgs = await h.app.outbox.byKeyPrefix(`submission:${r.submissionId}:`); expect(msgs.some((m) => /review/i.test((m.payload as { body: string }).body))).toBe(true);
     const actions = (await h.app.audit.list({ targetId: r.submissionId! })).map((a) => a.action); for (const a of ["submission.received", "review.escalated", "submission.facts_corrected", "submission.qualified"]) expect(actions, actions.join(",")).toContain(a);
   });
+  it("a reviewer can qualify an image with unreadable identity fields using a manual-review canonical record", async () => {
+    const r = await h.submit(B, await h.simImage(h.simReceipt({ no: "" }))); expect(r.submission?.status).toBe("review");
+    await expect(h.app.pipeline.review(r.submissionId!, { reviewerId: reviewer, decision: "qualified" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await h.app.pipeline.review(r.submissionId!, { reviewerId: reviewer, decision: "qualified", note: "Human verified the receipt image and qualifying product; fiscal identity fields are unreadable." });
+    const s = (await h.app.pipeline.get(r.submissionId!))!; expect(s.status).toBe("qualified");
+    const [canonical] = await h.db.select().from(schema.canonicalReceipts).where(eq(schema.canonicalReceipts.id, s.canonicalReceiptId!)); expect(canonical.receiptKey).toBe(`manual-review:${r.submissionId}`); expect(canonical.receiptNo).toBeNull();
+    expect((await h.db.select().from(schema.entries).where(eq(schema.entries.submissionId, r.submissionId!))).length).toBe(1);
+  });
   it("T-07: the same receipt from a second phone while the first is under review is an ownership dispute; resolving it as a different purchase is recorded, never a second award", async () => {
     // A's photo names another shop than the outlet A selected: the key (selected outlet, date, number) is intact but the match is uncertain -> review
     const one = await h.submit(A, await h.simImage(h.simReceipt({ no: "RV-300", merchant: "Baobab Stores\nWestgate, Harare" }))); expect(one.submission?.reasonCode).toBe("outlet_mismatch");     expect(one.submission?.status).toBe("review");
