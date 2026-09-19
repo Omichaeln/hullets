@@ -46,7 +46,7 @@ export interface AlertSink { raise(a: { kind: string; severity: "info" | "warnin
  * is retried; it never becomes a rejection.
  */
 export class ReceiptPipeline {
-  constructor(private db: Db, private deps: { media: MediaService; extractor: Extractor; campaigns: CampaignService; participants: ParticipantService; audit: AuditService; outbox: OutboxService; queue: QueueService; crm?: CrmEmitter | null; alerts: AlertSink; reviewSlaHours: number; qr?: { enabled: boolean; timeoutMs: number; maxBytes: number; maxRedirects: number; allowedHosts: string[] }; verifier?: AiVerificationService }) {}
+  constructor(private db: Db, private deps: { media: MediaService; extractor: Extractor; campaigns: CampaignService; participants: ParticipantService; audit: AuditService; outbox: OutboxService; queue: QueueService; crm?: CrmEmitter | null; alerts: AlertSink; reviewSlaHours: number; qr?: { enabled: boolean; timeoutMs: number; maxBytes: number; maxRedirects: number; allowedHosts: string[]; authoritativeHosts?: string[] }; verifier?: AiVerificationService }) {}
 
   async get(id: string) { const [s] = await this.db.select().from(submissions).where(eq(submissions.id, id)); return s ?? null; }
   async statusOf(id: string) { const [s] = await this.db.select({ status: submissions.status }).from(submissions).where(eq(submissions.id, id)); return s?.status ?? null; }
@@ -84,7 +84,7 @@ export class ReceiptPipeline {
     let facts: Facts;
     try {
       facts = await extractor.extract({ original, normalised, mime: asset.mime, context });
-      facts = (await enrichWithQrFallback({ facts, original, context, enabled: this.deps.qr?.enabled ?? true, fetch: { timeoutMs: this.deps.qr?.timeoutMs ?? 8_000, maxBytes: this.deps.qr?.maxBytes ?? 1_000_000, maxRedirects: this.deps.qr?.maxRedirects ?? 3, allowedHosts: this.deps.qr?.allowedHosts ?? [] } })).facts;
+      facts = (await enrichWithQrFallback({ facts, original, context, enabled: this.deps.qr?.enabled ?? true, fetch: { timeoutMs: this.deps.qr?.timeoutMs ?? 8_000, maxBytes: this.deps.qr?.maxBytes ?? 1_000_000, maxRedirects: this.deps.qr?.maxRedirects ?? 3, allowedHosts: this.deps.qr?.allowedHosts ?? [], authoritativeHosts: this.deps.qr?.authoritativeHosts ?? ["fdms.zimra.co.zw"] } })).facts;
     }
     catch (e) {
       const ex = e as ExtractorUnavailable;

@@ -8,7 +8,7 @@ const context = {
   products: [{ code: "HULETTS-BROWN-2KG", name: "Huletts Brown Sugar 2KG", aliases: ["huletts brown sugar", "huletts brown sugar 2kg"], packGrams: 2000, qualifying: true }],
   dateOrder: "DMY" as const,
 };
-const fetchConfig: QrFetchConfig = { timeoutMs: 2_000, maxBytes: 100_000, maxRedirects: 2, allowedHosts: [] };
+const fetchConfig: QrFetchConfig = { timeoutMs: 2_000, maxBytes: 100_000, maxRedirects: 2, allowedHosts: [], authoritativeHosts: ["fdms.zimra.co.zw"] };
 
 const code = (text: string) => ({ format: "QR_CODE", text, rawSha256: "code-hash" });
 
@@ -28,6 +28,7 @@ const code = (text: string) => ({ format: "QR_CODE", text, rawSha256: "code-hash
       fetcher: async () => ({ url: new URL("https://receipts.example.test/fiscal/receipt-170?token=secret"), contentType: "text/html", body: Buffer.from("<html><body>N Richards Masvingo<br>Receipt No: R-12345<br>Date: 27/08/2026<br>HULETTS BROWN SUGAR 2KG<br>2 x 43.52 = 87.04<br>TOTAL 100.00</body></html>") }),
     });
     expect(result.evidence.status).toBe("parsed");
+    expect(result.evidence.authority).toBe("none");
     expect(result.evidence.urlHost).toBe("receipts.example.test");
     expect(result.evidence.queryKeys).toEqual(["token"]);
     expect(result.facts.evidence.qr?.documentSha256).toMatch(/^[a-f0-9]{64}$/);
@@ -51,10 +52,33 @@ const code = (text: string) => ({ format: "QR_CODE", text, rawSha256: "code-hash
     expect(calls).toHaveLength(2);
     expect(calls[1]).toContain("/Receipt/Print?");
     expect(result.evidence.status).toBe("parsed");
+    expect(result.evidence.authority).toBe("zimra_verified");
+    expect(result.evidence.authorityHost).toBe("fdms.zimra.co.zw");
     expect(result.facts.lines[0]?.product?.code).toBe("HULETTS-BROWN-2KG");
     expect(result.facts.lines[0]?.quantity).toBe(2);
     expect(result.facts.transaction.date).toBe("2026-03-24");
     expect(result.facts.transaction.totalMinor).toBe(91168);
+  });
+
+  it("lets verified ZIMRA facts replace conflicting OCR values and records the override", async () => {
+    const ocr = emptyFacts("tesseract", "test", {
+      document: { kind: "receipt", score: 0.9, signals: {} },
+      transaction: { receiptNo: "WRONG1", receiptNoRaw: "WRONG1", till: null, date: "2026-03-25", dateRaw: "25/03/2026", dateAmbiguous: false, time: null, currency: "ZWG", totalMinor: 91169, totalRaw: "TOTAL 911.69" },
+      lines: [{ n: 1, raw: "HULETTS BROWN SUGAR 1KG", description: "HULETTS BROWN SUGAR 1KG", quantity: 1, packGrams: 1000, unitMinor: 91169, amountMinor: 91169, voided: false, product: { code: "HULETTS-BROWN-2KG", packGrams: 2000, basis: "ocr" } }],
+      quality: { missing: ["line_items"], warnings: [], confidence: 0.5, injectionSuspected: false },
+    });
+    const result = await enrichWithQrFallback({
+      facts: ocr, original: Buffer.from("receipt"), context, enabled: true, fetch: fetchConfig,
+      decoder: async () => [code("https://fdms.zimra.co.zw/qr/example")],
+      fetcher: async (url) => url.includes("/Receipt/Print")
+        ? { url: new URL(url), contentType: "text/html", body: Buffer.from("<html><body>Invoice No: 384/151707<br>Date: 24/03/2026<br>Description<br>HULETTS BROWN SUGAR<br>2 each @ 91.20<br>Total ZWG 911.68</body></html>") }
+        : { url: new URL(url), contentType: "text/html", body: Buffer.from('<html><body>Invoice is valid<form action="/Receipt/Print"><input value="27703931" name="validationId"><input value="lv1O3OFg" name="validationSecurityCode"><button>Review invoice</button></form></body></html>') },
+    });
+    expect(result.evidence.authority).toBe("zimra_verified");
+    expect(result.facts.transaction.date).toBe("2026-03-24");
+    expect(result.facts.transaction.totalMinor).toBe(91168);
+    expect(result.facts.lines[0]?.quantity).toBe(2);
+    expect(result.facts.quality.warnings).toEqual(expect.arrayContaining(["qr_authoritative_date_override", "qr_authoritative_totalMinor_override", "qr_lines_used"]));
   });
 
   it("does not perform QR work when OCR is already sufficient", async () => {

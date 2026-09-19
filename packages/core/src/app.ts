@@ -49,7 +49,7 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   const signals = new OpsSignals(db); const queue = new QueueService(db); const outbox = new OutboxService(db);
   const crmAdapter = opts.crmAdapter ?? (cfg.CRM_PROVIDER === "http-contract" ? new HttpContractAdapter(cfg.CRM_BASE_URL, cfg.CRM_TOKEN, cfg.CRM_TIMEOUT_MS) : new NoCrmAdapter());
   const crm = new CrmService(db, crmAdapter, environment, signals); participants.crm = crm;
-  const pipeline = new ReceiptPipeline(db, { media, extractor, verifier, campaigns, participants, audit, outbox, queue, crm, alerts: signals, reviewSlaHours: cfg.REVIEW_SLA_HOURS, qr: { enabled: cfg.qrFallbackEnabled, timeoutMs: cfg.QR_FETCH_TIMEOUT_MS, maxBytes: cfg.QR_FETCH_MAX_BYTES, maxRedirects: cfg.QR_FETCH_MAX_REDIRECTS, allowedHosts: cfg.qrAllowedHosts } });
+  const pipeline = new ReceiptPipeline(db, { media, extractor, verifier, campaigns, participants, audit, outbox, queue, crm, alerts: signals, reviewSlaHours: cfg.REVIEW_SLA_HOURS, qr: { enabled: cfg.qrFallbackEnabled, timeoutMs: cfg.QR_FETCH_TIMEOUT_MS, maxBytes: cfg.QR_FETCH_MAX_BYTES, maxRedirects: cfg.QR_FETCH_MAX_REDIRECTS, allowedHosts: cfg.qrAllowedHosts, authoritativeHosts: cfg.qrAuthoritativeHosts } });
   const winners = new WinnerService(db, { campaigns, participants, audit, outbox, crm, claimDays: cfg.CLAIM_WINDOW_DAYS });
   const draws = new DrawService(db, { campaigns, audit });
   const conversation = new ConversationEngine(db, { campaigns, participants, intake: pipeline, winners, crm, audit });

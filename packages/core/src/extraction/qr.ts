@@ -25,7 +25,7 @@ const DEFAULT_ALLOWED_FORMATS = new Set([
 ]);
 type SharpPipeline = ReturnType<typeof sharp>;
 
-export type QrFetchConfig = { timeoutMs: number; maxBytes: number; maxRedirects: number; allowedHosts: string[] };
+export type QrFetchConfig = { timeoutMs: number; maxBytes: number; maxRedirects: number; allowedHosts: string[]; authoritativeHosts?: string[] };
 export type QrDecodedCode = { format: string; text: string; rawSha256: string };
 
 type QrResult = { facts: Facts; evidence: QrEvidence };
@@ -123,12 +123,26 @@ function reviewInvoiceUrl(body: Buffer, contentType: string, base: URL) {
   return null;
 }
 
-async function fetchFiscalDocument(rawUrl: string, cfg: QrFetchConfig, fetcher: (url: string, cfg: QrFetchConfig) => Promise<QrFetchedDocument>) {
+type FiscalFetchResult = { document: QrFetchedDocument; warning: string | null; authoritativeHost: string | null };
+function hasZimraVerificationMarker(body: Buffer, contentType: string) {
+  if (!contentType.includes("html") && !contentType.includes("json") && !contentType.startsWith("text/")) return false;
+  const text = body.toString("utf8").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ");
+  return /invoice\s+is\s+valid|valid(?:ated|ation)\s+(?:invoice|receipt)|fiscal\s+(?:invoice|receipt)\s+(?:is\s+)?valid/i.test(text);
+}
+function authoritativeHost(url: URL, body: Buffer, contentType: string, cfg: QrFetchConfig) {
+  const hosts = cfg.authoritativeHosts ?? ["fdms.zimra.co.zw"];
+  return hostAllowed(url.hostname.toLowerCase(), hosts) && hasZimraVerificationMarker(body, contentType) ? url.hostname.toLowerCase() : null;
+}
+async function fetchFiscalDocument(rawUrl: string, cfg: QrFetchConfig, fetcher: (url: string, cfg: QrFetchConfig) => Promise<QrFetchedDocument>): Promise<FiscalFetchResult> {
   const initial = await fetcher(rawUrl, cfg);
   const review = reviewInvoiceUrl(initial.body, initial.contentType, initial.url);
-  if (!review) return { document: initial, warning: null as string | null };
-  try { return { document: await fetcher(review.toString(), cfg), warning: null as string | null }; }
-  catch { return { document: initial, warning: "review_fetch_failed" }; }
+  const initialAuthority = authoritativeHost(initial.url, initial.body, initial.contentType, cfg);
+  if (!review) return { document: initial, warning: null as string | null, authoritativeHost: initialAuthority };
+  try {
+    const document = await fetcher(review.toString(), cfg);
+    return { document, warning: null as string | null, authoritativeHost: initialAuthority ?? authoritativeHost(document.url, document.body, document.contentType, cfg) };
+  }
+  catch { return { document: initial, warning: "review_fetch_failed", authoritativeHost: initialAuthority }; }
 }
 
 function decodeEntities(text: string) { return text.replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16))); }
@@ -166,17 +180,21 @@ export async function decodeReceiptCodes(bytes: Buffer): Promise<QrDecodedCode[]
   return [];
 }
 
-function baseEvidence(): QrEvidence { return { attempted: true, status: "no_code", decoder: DECODER_VERSION, format: null, codeSha256: null, urlHost: null, urlPath: null, queryKeys: [], finalHost: null, finalPath: null, contentType: null, documentSha256: null, fetchedAt: null, fields: [], warnings: [], errorCode: null }; }
+function baseEvidence(): QrEvidence { return { attempted: true, status: "no_code", authority: "none", authorityHost: null, decoder: DECODER_VERSION, format: null, codeSha256: null, urlHost: null, urlPath: null, queryKeys: [], finalHost: null, finalPath: null, contentType: null, documentSha256: null, fetchedAt: null, fields: [], warnings: [], errorCode: null }; }
 
 function mergeFacts(ocr: Facts, digital: Facts, evidence: QrEvidence): Facts {
+  const authoritative = evidence.authority === "zimra_verified";
   const warnings = [...ocr.quality.warnings]; const tx = { ...ocr.transaction };
   for (const key of ["receiptNo", "receiptNoRaw", "till", "date", "dateRaw", "time", "currency", "totalMinor", "totalRaw"] as const) {
     const current = tx[key]; const incoming = digital.transaction[key];
-    if (current == null && incoming != null) (tx as Record<string, unknown>)[key] = incoming;
+    if (authoritative && incoming != null) {
+      if (current != null && current !== incoming) warnings.push(`qr_authoritative_${key}_override`);
+      (tx as Record<string, unknown>)[key] = incoming;
+    } else if (current == null && incoming != null) (tx as Record<string, unknown>)[key] = incoming;
     else if (current != null && incoming != null && current !== incoming) warnings.push(`qr_${key}_disagreement`);
   }
-  const merchant = ocr.merchant.text || ocr.merchant.candidates.length ? ocr.merchant : digital.merchant;
-  const useDigitalLines = !ocr.lines.length || (!ocr.lines.some((x) => x.product) && digital.lines.some((x) => x.product));
+  const merchant = authoritative && (digital.merchant.text || digital.merchant.candidates.length) ? digital.merchant : (ocr.merchant.text || ocr.merchant.candidates.length ? ocr.merchant : digital.merchant);
+  const useDigitalLines = digital.lines.some((x) => x.product) && (authoritative || !ocr.lines.length || !ocr.lines.some((x) => x.product));
   if (useDigitalLines && digital.lines.length) warnings.push("qr_lines_used");
   const missing = ocr.quality.missing.filter((field) => {
     if (field === "receipt_number") return !tx.receiptNo;
@@ -188,7 +206,8 @@ function mergeFacts(ocr: Facts, digital: Facts, evidence: QrEvidence): Facts {
   const digitalFields = [tx.receiptNo && "receipt_number", tx.date && "transaction_date", tx.totalMinor != null && "total", useDigitalLines && digital.lines.length && "line_items"].filter(Boolean) as string[];
   evidence.fields = digitalFields;
   evidence.status = "parsed";
-  return { ...ocr, document: ocr.document.kind === "non_receipt" ? digital.document : { ...ocr.document, score: Math.max(ocr.document.score, digital.document.score), kind: ocr.document.kind === "unknown" ? digital.document.kind : ocr.document.kind }, merchant, transaction: { ...tx, dateAmbiguous: ocr.transaction.date != null ? ocr.transaction.dateAmbiguous : digital.transaction.dateAmbiguous }, lines: useDigitalLines && digital.lines.length ? digital.lines : ocr.lines, quality: { ...ocr.quality, missing, warnings, confidence: ocr.quality.confidence }, evidence: { ...ocr.evidence, qr: evidence }, raw: { ...(ocr.raw ?? {}), qr: evidence } };
+  const document = authoritative ? digital.document : (ocr.document.kind === "non_receipt" ? digital.document : { ...ocr.document, score: Math.max(ocr.document.score, digital.document.score), kind: ocr.document.kind === "unknown" ? digital.document.kind : ocr.document.kind });
+  return { ...ocr, document, merchant, transaction: { ...tx, dateAmbiguous: authoritative ? digital.transaction.dateAmbiguous : (ocr.transaction.date != null ? ocr.transaction.dateAmbiguous : digital.transaction.dateAmbiguous) }, lines: useDigitalLines && digital.lines.length ? digital.lines : ocr.lines, quality: { ...ocr.quality, missing, warnings, confidence: authoritative ? 1 : ocr.quality.confidence }, evidence: { ...ocr.evidence, qr: evidence }, raw: { ...(ocr.raw ?? {}), qr: evidence } };
 }
 
 export async function enrichWithQrFallback(input: { facts: Facts; original: Buffer; context: ExtractionContext; enabled: boolean; fetch: QrFetchConfig; decoder?: (bytes: Buffer) => Promise<QrDecodedCode[]>; fetcher?: (url: string, cfg: QrFetchConfig) => Promise<QrFetchedDocument> }): Promise<QrResult> {
@@ -206,6 +225,8 @@ export async function enrichWithQrFallback(input: { facts: Facts; original: Buff
   try {
     const fetchedResult = await fetchFiscalDocument(candidate.text, input.fetch, input.fetcher ?? fetchFiscalUrl); const fetched = fetchedResult.document; if (fetchedResult.warning) evidence.warnings.push(fetchedResult.warning); const text = digitalText(fetched.body, fetched.contentType); const digital = parseReceiptText(text, input.context, { provider: "qr-fiscal", model: `${DECODER_VERSION}/text-parser`, promptVersion: "qr-fiscal/1", confidence: 1, raw: { documentSha256: sha256(fetched.body), contentType: fetched.contentType } });
     evidence.urlHost = new URL(candidate.text).hostname; evidence.urlPath = new URL(candidate.text).pathname.slice(0, 512); evidence.queryKeys = queryKeys(new URL(candidate.text)); evidence.finalHost = fetched.url.hostname; evidence.finalPath = fetched.url.pathname.slice(0, 512); evidence.contentType = fetched.contentType; evidence.documentSha256 = sha256(fetched.body); evidence.fetchedAt = new Date().toISOString();
+    evidence.authorityHost = fetchedResult.authoritativeHost;
+    evidence.authority = fetchedResult.authoritativeHost && digital.document.kind !== "non_receipt" && Boolean(digital.transaction.date || digital.transaction.receiptNo || digital.lines.length) ? "zimra_verified" : fetchedResult.authoritativeHost ? "digital_fiscal" : "none";
     return { facts: mergeFacts(input.facts, digital, evidence), evidence };
   } catch (e) {
     const err = e instanceof QrFailure ? e : new QrFailure("fetch_failed", (e as Error).message);
