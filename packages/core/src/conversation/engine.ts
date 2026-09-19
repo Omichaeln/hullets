@@ -59,6 +59,7 @@ export class ConversationEngine {
     const reply = (st: string, msgs: string | string[], extra: Partial<ConversationResult> = {}): ConversationResult => ({ replies: ([] as string[]).concat(msgs), state: st, campaignId: cid, ...extra });
     const menu = () => render(M, "menu", { campaign: campaign.name, status_item: flags.participantStatus ? render(M, "menu_status_item") : "" });
     const home = async (prefix?: string) => { await save("HOME", { lastSubmissionId: ctx.lastSubmissionId }); return reply("HOME", prefix ? [prefix, menu()] : [menu()]); };
+    const welcome = async () => { await save("HOME", { lastSubmissionId: ctx.lastSubmissionId }); return reply("HOME", [render(M, "greeting", { campaign: campaign.name }), menu()]); };
     const packLabel = `${rules.qualification.packGrams / 1000}kg pack`;
     const productName = rules.products.find((p) => p.qualifying)?.name ?? "the qualifying product";
 
@@ -72,6 +73,9 @@ export class ConversationEngine {
     if (campaign.status === "closed") { if (intent === "WINNERS" || state === "WINNERS") return this.winnersFlow({ cid, M, ctx, state, number, fresh: intent === "WINNERS", save, reply }); return reply("HOME", render(M, "closed")); }
     const controls = await campaigns.controls(cid);
 
+    // Greetings are a global reset action. This prevents a casual "hi" from
+    // being interpreted as an invalid answer to a state-specific prompt.
+    if (intent === "GREETING") return welcome();
     if (intent === "MENU") return home();
     // A numbered option on the current screen wins over the "9 = help" shortcut (page lists end in "9. More…").
     const numberedOption = number != null && state === "OUTLET" && Boolean(ctx.nav?.options[number - 1]);
@@ -227,7 +231,7 @@ export class ConversationEngine {
           if (participant && enrollment && !enrollment.withdrawnAt && ctx.outletId && ctx.lastSubmissionId && !controls.pauseIntake && campaign.status === "active") return receiptFlow({ remembered: true });
           return reply("HOME", [render(M, "need_photo"), menu()]);
         }
-        if (intent === "GREETING" || intent === "BACK") return home();
+        if (intent === "BACK") return home();
         return reply("HOME", render(M, "unknown", { menu: menu() }));
       }
       case "REG_NAME": case "REG_SURNAME": case "REG_ID": case "REG_LOCATION": case "REG_CONFIRM": case "REG_TERMS": return registration();

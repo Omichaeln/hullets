@@ -7,6 +7,7 @@
  */
 export const MESSAGES: Record<string, string> = {
   menu: "Welcome to {campaign}!\n1. Register\n2. Enter the promotion\n3. How it works\n4. Terms & conditions\n5. Prizes\n6. Winners{status_item}\n9. Help\n\nReply with a number.",
+  greeting: "Hello! Welcome to {campaign}.",
   menu_status_item: "\n7. My entries",
   no_campaign: "There is no promotion running at the moment. Please check back soon.",
   closed: "This promotion has closed. Thank you for taking part! Reply 6 to see the winners.",
