@@ -51,7 +51,7 @@ describe("audit findings", () => {
     const guardedFirst = await h.submit(phoneA, await h.simImage(receipt("")), { outlet: at(westgate) });
     const guardedSecond = await h.submit(phoneA, await h.simImage(receipt("PLASTIC BAG 0.10\n")), { outlet: at(other) });
     expect(guardedFirst.submission?.status, "the honest submission qualifies").toBe("qualified");
-    expect(guardedSecond.submission?.status, "naming another branch is held for review, not credited").toBe("review");
+    expect(guardedSecond.submission?.status, "the same printed receipt is the same purchase, whatever branch the participant names").toBe("duplicate");
 
     // 2. Turn the one rule off, and the same two submissions both earn an entry.
     const [version] = await h.app.db.select().from(schema.campaignVersions)
@@ -71,19 +71,21 @@ describe("audit findings", () => {
     const credited = await h.app.db.select().from(schema.entries)
       .where(and(eq(schema.entries.participantId, pid), eq(schema.entries.status, "active")));
 
-    // This is the finding, recorded as the failure it is. Flip the expectation to
-    // 1 when the canonical identity stops depending on a participant-supplied
-    // value — for example by keying on the merchant read off the receipt, or by
-    // making a perceptual match block rather than merely annotate.
+    // CLOSED. The finding was that the canonical identity keyed off an outlet
+    // the participant supplied, so naming two branches minted two identities
+    // for one printed receipt — and with outletMatch.required=false nothing
+    // else caught it. The receipt is now the primary input: the outlet is read
+    // from the document (or from the fiscal record), and what the participant
+    // says about it is evidence to reconcile, never the key. The guarantee no
+    // longer rests on that one rule, which is what this half of the test now
+    // proves — the rule is OFF here.
     expect(
       credited.length,
-      `with outletMatch.required=false, one printed receipt earned ${credited.length} entries by naming two branches ` +
+      `with outletMatch.required=false, one printed receipt earned ${credited.length} entries ` +
       `(first=${openFirst.submission?.status}, second=${openSecond.submission?.status})`,
-    ).toBe(2);
-
-    // ...and nothing in the record marks it: no duplicate, no review, no flag.
+    ).toBe(1);
     expect(openFirst.submission?.status).toBe("qualified");
-    expect(openSecond.submission?.status).toBe("qualified");
+    expect(openSecond.submission?.status).toBe("duplicate");
 
     // Leave the campaign as it was for anything that runs after this.
     await h.app.db.update(schema.campaignVersions).set({ rules }).where(eq(schema.campaignVersions.id, version.id));
@@ -240,6 +242,9 @@ describe("audit findings", () => {
       DATA_KEY: "test-data-key-0123456789-abcdef", AUDIT_SIGNING_KEY: "test-audit-key",
       BOOTSTRAP_ADMIN_EMAIL: "admin@example.test", BOOTSTRAP_ADMIN_PASSWORD: "TestAdminPassword2026",
       EXTRACTOR: "tesseract", WHATSAPP_PROVIDER: "cloud-api",
+      // Production refuses filesystem media, so a production-shaped config has
+      // to name a bucket for the boot to get as far as the stamp check.
+      STORAGE_DRIVER: "s3", S3_BUCKET: "test-bucket", S3_REGION: "us-east-1", S3_ACCESS_KEY_ID: "k", S3_SECRET_ACCESS_KEY: "s",
       META_PHONE_NUMBER_ID: "1000000000", META_ACCESS_TOKEN: "t", META_APP_SECRET: "s", META_VERIFY_TOKEN: "v",
     });
     let second: Awaited<ReturnType<typeof createApp>> | null = null;

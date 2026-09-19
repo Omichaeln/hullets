@@ -1,4 +1,5 @@
 import type { AuditService } from "../audit.ts";
+import type { AuthService } from "../auth/service.ts";
 import type { Db } from "@promo/db";
 import type { QueueService, InboundEvent } from "./queue.ts";
 import type { OutboxService } from "./outbox.ts";
@@ -22,7 +23,7 @@ import { SendError } from "../whatsapp/transport.ts";
  */
 export class Worker {
   private timer: NodeJS.Timeout | null = null; private running = false; private ticks = 0; private lastTickAt: string | null = null;
-  constructor(private d: { db: Db; cfg: Config; environment: string; queue: QueueService; outbox: OutboxService; crm: CrmService; transport: WhatsAppTransport; conversation: ConversationEngine; pipeline: ReceiptPipeline; winners: WinnerService; media: MediaService; campaigns: CampaignService; signals: OpsSignals; audit: AuditService; log: Logger; intervalMs?: number }) {}
+  constructor(private d: { db: Db; cfg: Config; environment: string; queue: QueueService; outbox: OutboxService; crm: CrmService; transport: WhatsAppTransport; conversation: ConversationEngine; pipeline: ReceiptPipeline; winners: WinnerService; media: MediaService; campaigns: CampaignService; signals: OpsSignals; audit: AuditService; auth: AuthService; log: Logger; intervalMs?: number }) {}
   start() { if (!this.timer) this.timer = setInterval(() => void this.tick(), this.d.intervalMs ?? this.d.cfg.WORKER_POLL_MS); }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
   health() { return { running: !!this.timer, ticks: this.ticks, lastTickAt: this.lastTickAt }; }
@@ -65,10 +66,31 @@ export class Worker {
     const job = await this.d.queue.leaseJob(); if (!job) return false;
     try {
       const p = job.payload as { submissionId?: string };
-      if (job.kind === "submission.process") { const r = await this.d.pipeline.process(p.submissionId!); const s = await this.d.pipeline.get(p.submissionId!); if (s && !["received", "processing", "delayed"].includes(s.status)) { const part = await this.d.db.query.participants.findFirst({ where: (t, { eq }) => eq(t.id, s.participantId) }); if (part) await this.d.conversation.onSubmissionOutcome(s.campaignId, part.channelUid, s.id); } void r; }
+      if (job.kind === "submission.process") {
+        const r = await this.d.pipeline.process(p.submissionId!);
+        const s = await this.d.pipeline.get(p.submissionId!);
+        if (s && !["received", "processing", "delayed"].includes(s.status)) {
+          const part = await this.d.db.query.participants.findFirst({ where: (t, { eq }) => eq(t.id, s.participantId) });
+          if (part) {
+            // A submission that still needs the participant opens a
+            // confirmation on their conversation instead of clearing it — but
+            // only when they are idle, so a background job never interrupts a
+            // registration or a support conversation mid-sentence.
+            if (s.status === "awaiting_participant") {
+              const opened = await this.d.conversation.requestConfirmation(s.campaignId, part.channelUid, s.id, r.pendingFields ?? []);
+              // Nobody to ask — the participant is with support or mid-flow.
+              // Escalate rather than leave the submission unattended.
+              if (!opened.opened) await this.d.pipeline.escalateStalledQuestions({ olderThanMs: -1, limit: 1 });
+            }
+            else await this.d.conversation.onSubmissionOutcome(s.campaignId, part.channelUid, s.id);
+          }
+        }
+      }
       else if (job.kind === "winners.expire") await this.d.winners.expireDue();
       else if (job.kind === "audit.checkpoint") await this.d.audit.checkpoint("system:housekeeping");
       else if (job.kind === "media.purge") await this.d.media.purgeExpired();
+      else if (job.kind === "auth.sweep") { await this.d.auth.sweepExpired(); await this.d.queue.sweepJobs(); }
+      else if (job.kind === "questions.escalate") await this.d.pipeline.escalateStalledQuestions();
       else throw Object.assign(new Error(`unknown job kind ${job.kind}`), { permanent: true });
       await this.d.queue.completeJob(job.id); return true;
     } catch (e) {
@@ -93,12 +115,16 @@ export class Worker {
   async housekeeping() {
     try {
       const st = await this.d.queue.stats(); if (st.oldestEvent && Date.now() - Date.parse(st.oldestEvent) > 5 * 60_000) await this.d.signals.raise({ kind: "inbound.backlog", severity: "warning", message: `inbound backlog: oldest event ${st.oldestEvent}`, runbook: "docs/runbooks/queue-replay.md" });
-      const rq = await this.d.pipeline.reviewQueue(); if (rq.overdue) await this.d.signals.raise({ kind: "review.backlog", severity: "warning", message: `${rq.overdue} submissions past the review target; oldest ${rq.oldest}`, runbook: "docs/runbooks/review-operations.md" });
+      const rq = await this.d.pipeline.reviewQueueStats(); if (rq.overdue) await this.d.signals.raise({ kind: "review.backlog", severity: "warning", message: `${rq.overdue} submissions past the review target; oldest ${rq.oldest}`, runbook: "docs/runbooks/review-operations.md" });
       const ob = await this.d.outbox.stats(); if ((ob.byStatus.unknown_outcome ?? 0) + (ob.byStatus.permanent_failure ?? 0) > 0) await this.d.signals.raise({ kind: "outbound.failures", severity: "warning", message: `outbound failures: ${JSON.stringify(ob.byStatus)}`, runbook: "docs/runbooks/provider-outage.md" });
       const hour = new Date().toISOString().slice(0, 13);
       await this.d.queue.enqueueJob(this.d.db, "winners.expire", {}, { dedupeKey: `winners.expire:${hour}` });
       await this.d.queue.enqueueJob(this.d.db, "audit.checkpoint", {}, { dedupeKey: `audit.checkpoint:${new Date().toISOString().slice(0, 10)}` }); // a signed chain head every day
       await this.d.queue.enqueueJob(this.d.db, "media.purge", {}, { dedupeKey: `media.purge:${new Date().toISOString().slice(0, 10)}` });
+      await this.d.queue.enqueueJob(this.d.db, "auth.sweep", {}, { dedupeKey: `auth.sweep:${hour}` });
+      await this.d.queue.enqueueJob(this.d.db, "questions.escalate", {}, { dedupeKey: `questions.escalate:${hour}` });
+      const retention = await this.d.media.retentionBacklog();
+      if (retention.due > 10_000) await this.d.signals.raise({ kind: "media.retention_backlog", severity: "warning", message: `${retention.due} media assets are past their retention date; oldest ${retention.oldest}`, runbook: "docs/runbooks/media-and-extraction.md" });
     } catch (e) { this.d.log.error({ err: (e as Error).message }, "housekeeping failed"); }
   }
 }

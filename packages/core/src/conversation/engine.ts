@@ -1,24 +1,54 @@
 import { eq, and, desc, sql } from "drizzle-orm";
-import { schema, type Db } from "@promo/db";
+import { schema, type Db, type DbOrTx } from "@promo/db";
 import { newId } from "../util/ids.ts";
 import { maskPhone } from "../util/phone.ts";
 import { parseIntent, type Intent } from "./intent.ts";
 import { render, reasonText } from "./copy.ts";
 import { maskIdentity, type ParticipantService } from "../participant/service.ts";
+import { UNRESOLVED_STATUSES } from "../receipt/pipeline.ts";
 import type { CampaignService, Outlet } from "../campaign/service.ts";
 import type { AuditService } from "../audit.ts";
 
 const { conversations, submissions, entries } = schema;
 const PAGE = 8;
+/** What the participant is asked for, in their words. */
+const FIELD_PROMPTS: Record<string, string> = { outletId: "the shop where you bought", date: "the purchase date (for example 19/09/2026)", receiptNo: "the receipt number", total: "the total on the receipt", merchant: "the shop name", branch: "the branch" };
+/** Parse one specific answer. Anything unparseable is re-asked rather than guessed at. */
+export function parseFieldAnswer(field: string, text: string): unknown {
+  const t = String(text ?? "").trim();
+  if (!t) return null;
+  if (field === "date") {
+    let m = t.match(/^(\d{1,2})[/\-. ](\d{1,2})[/\-. ](\d{2,4})$/);
+    if (m) { const [, d, mo, y] = m; const year = y.length === 2 ? `20${y}` : y; const day = Number(d), mon = Number(mo); if (day < 1 || day > 31 || mon < 1 || mon > 12) return null; return `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`; }
+    m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? t : null;
+  }
+  if (field === "total") { const n = Number(t.replace(/[^\d.]/g, "")); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null; }
+  // A receipt number has digits in it. Without that check a participant asked
+  // for one could answer with anything and have it accepted as the receipt's
+  // identity — which is what the canonical key is built from.
+  if (field === "receiptNo") { const v = t.toUpperCase().replace(/[^A-Z0-9]/g, ""); return v.length >= 3 && v.length <= 32 && /\d/.test(v) ? v : null; }
+  return t.length >= 2 ? t.slice(0, 80) : null;
+}
 export type InboundKind = "text" | "image" | "unsupported";
 export type ConversationInput = { eventId: string; providerMessageId: string; uid: string; kind: InboundKind; text?: string; mediaBytes?: Buffer | null; mime?: string | null; correlationId?: string | null; eventAt?: string | null };
 export type ConversationResult = { replies: string[]; state: string; campaignId: string | null; participantId?: string | null; submissionId?: string | null };
 type Nav = { mode: "retailers" | "branches" | "search"; retailer?: string; page: number; options: Array<{ label: string; value: string; kind: "retailer" | "outlet" | "more" }>; query?: string };
-type Ctx = { reg?: Record<string, string | boolean | undefined>; nav?: Nav; outletId?: string; outletLabel?: string; lastSubmissionId?: string; resumeState?: "OUTLET" | "OUTLET_CONFIRM" | "RECEIPT"; resumeOutletId?: string; resumeOutletLabel?: string; winnerNav?: Array<{ label: string; value: string }> };
+type Ctx = { reg?: Record<string, string | boolean | undefined>; nav?: Nav; outletId?: string; outletLabel?: string; lastSubmissionId?: string; resumeState?: "OUTLET" | "OUTLET_CONFIRM" | "RECEIPT" | "CAPTURE"; resumeOutletId?: string; resumeOutletLabel?: string; winnerNav?: Array<{ label: string; value: string }>;
+  /** The submission awaiting the participant's confirmation, and what we are asking about. */
+  confirmSubmissionId?: string; pendingField?: string; pendingNav?: Array<{ label: string; value: string }> };
 
-export interface SubmissionIntake { submit(input: { campaignId: string; campaignVersionId: string; participantId: string; conversationId: string; inboundEventId: string; providerMessageId: string; uid: string; imageBytes: Buffer; selectedOutletId: string; correlationId?: string | null; eventAt?: string | null; reuploadOf?: string | null }): Promise<{ submissionId: string; reference: string; replay: boolean }>; statusOf(submissionId: string): Promise<string | null>; }
+export type ConfirmationRequest = { submissionId: string; reference: string; details: Array<{ field: string; label: string; value: string; source: string }>; pendingFields: string[] };
+export interface SubmissionIntake {
+  submit(input: { campaignId: string; campaignVersionId: string; participantId: string; conversationId: string; inboundEventId: string; providerMessageId: string; uid: string; imageBytes: Buffer; selectedOutletId?: string | null; correlationId?: string | null; eventAt?: string | null; reuploadOf?: string | null }): Promise<{ submissionId: string; reference: string; replay: boolean }>;
+  statusOf(submissionId: string): Promise<string | null>;
+  /** What the system established, for the participant to confirm, and what it could not. */
+  confirmationFor(submissionId: string): Promise<ConfirmationRequest | null>;
+  /** Record the participant's answer as evidence and re-run verification. */
+  applyUserEvidence(submissionId: string, evidence: Record<string, unknown>, opts?: { confirmed?: boolean; rejected?: boolean }): Promise<{ queued: boolean }>;
+}
 export interface WinnersReadModel { publishedPeriods(campaignId: string): Promise<Array<{ code: string; label: string }>>; listPublic(campaignId: string, period: string): Promise<Array<{ rank: number; name: string; location: string | null; prize: string }>>; }
-export interface CrmEmitter { emit(e: { entityType: string; entityId: string; entityVersion: number; payload: Record<string, unknown>; correlationId?: string | null }): Promise<unknown>; }
+export interface CrmEmitter { emit(tx: DbOrTx, e: { entityType: string; entityId: string; entityVersion: number; payload: Record<string, unknown>; correlationId?: string | null }): Promise<unknown>; }
 
 /**
  * Persisted per-campaign, per-phone state machine. Every transition is a pure
@@ -115,8 +145,8 @@ export class ConversationEngine {
           if (!version) return reply("HOME", render(M, "no_campaign"));
           const res = await participants.register({ uid, firstName: (reg.firstName as string) || participant!.firstName, surname: (reg.surname as string) ?? participant?.surname ?? "", location: (reg.location as string) || participant?.location || null, identity: (reg.identity as string) || null, campaignId: cid, campaignVersionId: version.id, termsVersion: content.termsVersion || `v${version.versionNo}`, privacyVersion: content.privacyVersion || `v${version.versionNo}`, marketingConsent: false, correlationId: input.correlationId });
           const p = res.participant;
-          await this.deps.crm?.emit({ entityType: "participant", entityId: p.id, entityVersion: p.version, payload: { firstName: p.firstName, surname: p.surname, phone: maskPhone(p.channelUid), location: p.location, status: p.status }, correlationId: input.correlationId });
-          await this.deps.crm?.emit({ entityType: "enrollment", entityId: `${p.id}:${cid}`, entityVersion: 1, payload: { participantId: p.id, campaignCode: campaign.code, termsVersion: res.enrollment.termsVersion, privacyVersion: res.enrollment.privacyVersion, marketingConsent: res.enrollment.marketingConsent, acceptedAt: res.enrollment.acceptedAt }, correlationId: input.correlationId });
+          await this.deps.crm?.emit(this.db, { entityType: "participant", entityId: p.id, entityVersion: p.version, payload: { firstName: p.firstName, surname: p.surname, phone: maskPhone(p.channelUid), location: p.location, status: p.status }, correlationId: input.correlationId });
+          await this.deps.crm?.emit(this.db, { entityType: "enrollment", entityId: `${p.id}:${cid}`, entityVersion: 1, payload: { participantId: p.id, campaignCode: campaign.code, termsVersion: res.enrollment.termsVersion, privacyVersion: res.enrollment.privacyVersion, marketingConsent: res.enrollment.marketingConsent, acceptedAt: res.enrollment.acceptedAt }, correlationId: input.correlationId });
           await save("HOME", { lastSubmissionId: ctx.lastSubmissionId }, { participantId: p.id });
           const m = reg.updating ? returningMenu() : menu();
           return reply("HOME", `${render(M, reg.updating ? "updated" : "registered", { first_name: p.firstName })}\n\n${m}`, { participantId: p.id });
@@ -130,11 +160,38 @@ export class ConversationEngine {
       await save("REG_NAME", { ...ctx, reg }); return reply("REG_NAME", [render(M, "update_intro", { first_name: participant?.firstName ?? "" }), render(M, "reg_first")]);
     };
 
+    /**
+     * Entering the promotion starts with the receipt, not with a menu of
+     * eighty branches. The shop, the date and the amount are things the
+     * system establishes — from the fiscal record where the receipt carries a
+     * QR code, from the image where it does not — and the participant is asked
+     * to confirm them afterwards. They are only asked to TYPE something when
+     * nothing else could establish it.
+     */
     const startEntry = async (): Promise<ConversationResult> => {
       if (!participant) return reply("HOME", render(M, "not_registered"));
       if (!enrollment || enrollment.withdrawnAt) { await save("REG_TERMS", { reg: {} }); return reply("REG_TERMS", render(M, "reg_terms", { terms_version: content.termsVersion || "unversioned", privacy_version: content.privacyVersion || "unversioned", terms_url: content.termsUrl || "(link to be supplied)", min_age: rules.eligibility.minAge })); }
       if (campaign.status === "paused" || controls.pauseIntake) return reply("HOME", render(M, "paused"));
-      return showRetailers(0);
+      await save("CAPTURE", { ...ctx, nav: undefined, confirmSubmissionId: undefined, pendingField: undefined });
+      return reply("CAPTURE", render(M, "capture_prompt"));
+    };
+    /** Capture: any photo is accepted; nothing is asked for up front. */
+    const captureFlow = async (): Promise<ConversationResult> => {
+      if (intent === "BACK") return home();
+      if (!isImage) return reply("CAPTURE", render(M, "capture_prompt"));
+      if (!input.mediaBytes) return reply("CAPTURE", render(M, "media_missing"));
+      if (!participant || !version) return home();
+      if (controls.pauseIntake) return reply("HOME", render(M, "paused"));
+      try {
+        const reuploadOf = ctx.lastSubmissionId && (await this.deps.intake.statusOf(ctx.lastSubmissionId)) === "reupload" ? ctx.lastSubmissionId : null;
+        const res = await this.deps.intake.submit({ campaignId: cid, campaignVersionId: version.id, participantId: participant.id, conversationId: session!.id, inboundEventId: input.eventId, providerMessageId: input.providerMessageId, uid, imageBytes: input.mediaBytes, selectedOutletId: ctx.outletId ?? null, correlationId: input.correlationId, eventAt: input.eventAt, reuploadOf });
+        await save("HOME", { lastSubmissionId: res.submissionId, outletId: ctx.outletId, outletLabel: ctx.outletLabel }, { activeSubmissionId: res.submissionId });
+        return reply("HOME", render(M, res.replay ? "still_checking" : "capture_received", { reference: res.reference }), { submissionId: res.submissionId });
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        if (code === "MEDIA_REJECTED") return reply("CAPTURE", render(M, "media_rejected", { reason: (e as Error).message }));
+        throw e; // the intake job retries with backoff; the participant is never told a false outcome
+      }
     };
     const outletLabel = (o: Outlet) => `${o.retailer} — ${o.branch}, ${o.town}`;
     const paged = <T extends { label: string; value: string; kind: "retailer" | "outlet" }>(list: T[], page: number) => { const slice = list.slice(page * PAGE, page * PAGE + PAGE); const more = (page + 1) * PAGE < list.length; return [...slice, ...(more ? [{ label: "More…", value: "__more", kind: "more" as const }] : [])]; };
@@ -166,16 +223,48 @@ export class ConversationEngine {
       await save("OUTLET_CONFIRM", { ...ctx, nav: undefined, outletId: o.id, outletLabel: label });
       return reply("OUTLET_CONFIRM", render(M, "outlet_verify", { outlet: label }));
     };
+    /**
+     * The shop browse, reached when the system could not establish the outlet
+     * and the participant would rather pick from a list than type. The same
+     * paging and search as before; only the destination differs — the choice
+     * becomes evidence on the waiting submission rather than a setting carried
+     * into the next upload.
+     */
+    // One save per turn: showRetailers persists the state itself, and the
+    // optimistic version check rejects a second write in the same turn.
+    // ctx (including the waiting submission) is carried through by showRetailers.
+    const browseForAnswer = async () => showRetailers(0);
     const outletConfirmation = async (): Promise<ConversationResult> => {
       const label = ctx.outletLabel ?? "the selected outlet";
-      if (intent === "YES") { await save("RECEIPT", { ...ctx }); return reply("RECEIPT", render(M, "outlet_confirmed", { outlet: label })); }
+      if (intent === "YES") {
+        if (ctx.confirmSubmissionId && ctx.outletId) {
+          await this.deps.intake.applyUserEvidence(ctx.confirmSubmissionId, { outletId: ctx.outletId });
+          const request = await this.deps.intake.confirmationFor(ctx.confirmSubmissionId);
+          await save("HOME", { ...ctx, confirmSubmissionId: undefined, pendingField: undefined, nav: undefined });
+          return reply("HOME", render(M, "confirm_recorded", { reference: request?.reference ?? "" }));
+        }
+        await save("RECEIPT", { ...ctx }); return reply("RECEIPT", render(M, "outlet_confirmed", { outlet: label }));
+      }
+      if (isImage) return captureFlow();
       if (intent === "NO" || intent === "BACK") { await save("OUTLET", { ...ctx, nav: undefined, outletId: undefined, outletLabel: undefined }); return reply("OUTLET", render(M, "outlet_verify_no")); }
       return reply("OUTLET_CONFIRM", render(M, "outlet_verify_retry", { outlet: label }));
     };
     const outletFlow = async (): Promise<ConversationResult> => {
       const nav = ctx.nav;
-      if (intent === "BACK") return nav?.mode === "retailers" || !nav ? home() : showRetailers(0);
-      if (isImage || intent === "UNSUPPORTED") return reply(state, render(M, "outlet_pick_number"));
+      if (intent === "BACK") {
+        if (nav?.mode !== "retailers" && nav) return showRetailers(0);
+        // Backing out of the top of the browse returns to the question that
+        // opened it, when one is still waiting — abandoning the browse is not
+        // the same as abandoning the receipt.
+        if (ctx.confirmSubmissionId && ctx.pendingField) {
+          const request = await this.deps.intake.confirmationFor(ctx.confirmSubmissionId);
+          await save("ASK_FIELD", { ...ctx, nav: undefined, pendingNav: undefined });
+          return reply("ASK_FIELD", render(M, "confirm_missing_outlet", { reference: request?.reference ?? "" }));
+        }
+        return home();
+      }
+      if (isImage) return captureFlow();
+      if (intent === "UNSUPPORTED") return reply(state, render(M, "outlet_pick_number"));
       if (number != null && nav) {
         const pick = nav.options[number - 1];
         if (!pick) return reply(state, render(M, "outlet_pick_number"));
@@ -224,8 +313,8 @@ export class ConversationEngine {
       if (!participant) return reply("HOME", render(M, "not_registered"));
       const rows = await this.db.select({ reference: submissions.reference, status: submissions.status }).from(submissions).where(and(eq(submissions.participantId, participant.id), eq(submissions.campaignId, cid))).orderBy(desc(submissions.createdAt)).limit(50);
       const [{ q }] = await this.db.select({ q: sql<number>`count(*)::int` }).from(entries).where(and(eq(entries.participantId, participant.id), eq(entries.campaignId, cid), eq(entries.status, "active")));
-      const label: Record<string, string> = { received: "being checked", processing: "being checked", delayed: "delayed", review: "under review", qualified: "qualified", not_qualified: "did not qualify", duplicate: "already used", reupload: "needs a clearer photo" };
-      const pending = rows.filter((r) => ["received", "processing", "delayed", "review"].includes(r.status)).length;
+      const label: Record<string, string> = { received: "being checked", processing: "being checked", delayed: "delayed", review: "under review", awaiting_participant: "waiting for your reply", qualified: "qualified", not_qualified: "did not qualify", duplicate: "already used", reupload: "needs a clearer photo" };
+      const pending = rows.filter((r) => (UNRESOLVED_STATUSES as readonly string[]).includes(r.status)).length;
       const rejected = rows.filter((r) => ["not_qualified", "duplicate", "reupload"].includes(r.status)).length;
       const recent = rows.slice(0, 3).map((r) => render(M, "status_line", { reference: r.reference, outcome: label[r.status] ?? r.status })).join("\n");
       return reply("HOME", render(M, "status", { campaign: campaign.name, qualified: q, pending, rejected, recent }));
@@ -236,6 +325,73 @@ export class ConversationEngine {
       const plan = campaigns.planOf(version);
       const prizes = content.prizesText || plan.tiers.map((t) => `${t.count} x ${t.label}`).join("; ") || "to be announced";
       return render(M, "prizes", { prizes, artwork: content.prizeArtworkUrl ? render(M, "prizes_artwork", { url: content.prizeArtworkUrl }) + (content.prizeArtworkAlt ? ` (${content.prizeArtworkAlt})` : "") : render(M, "prizes_no_artwork") });
+    };
+
+    /**
+     * Confirmation. The system states what it established and asks yes or no.
+     * A "no" is not a correction form — it is a referral to a human, because a
+     * participant disagreeing with an authoritative record is exactly the case
+     * that should not be resolved by letting them retype it.
+     */
+    const confirmFlow = async (): Promise<ConversationResult> => {
+      const submissionId = ctx.confirmSubmissionId;
+      if (!submissionId) return home();
+      const request = await this.deps.intake.confirmationFor(submissionId);
+      if (!request) { await save("HOME", { ...ctx, confirmSubmissionId: undefined }); return reply("HOME", render(M, "still_checking", { reference: "" })); }
+      if (intent === "YES" || number === 1) {
+        await this.deps.intake.applyUserEvidence(submissionId, {}, { confirmed: true });
+        await save("HOME", { ...ctx, confirmSubmissionId: undefined, pendingField: undefined });
+        return reply("HOME", render(M, "confirm_thanks", { reference: request.reference }));
+      }
+      if (intent === "NO" || number === 2) {
+        await this.deps.intake.applyUserEvidence(submissionId, {}, { rejected: true });
+        await save("HOME", { ...ctx, confirmSubmissionId: undefined, pendingField: undefined });
+        return reply("HOME", render(M, "confirm_rejected", { reference: request.reference }));
+      }
+      if (isImage) return captureFlow();
+      const details = request.details.map((d) => render(M, "confirm_detail_line", { label: d.label, value: d.value })).join("\n");
+      return reply("CONFIRM", render(M, "confirm_details", { reference: request.reference, details }));
+    };
+
+    /**
+     * The one thing we could not establish. The answer is evidence at the
+     * lowest authority and is reconciled against the receipt and the fiscal
+     * record — it never overwrites either.
+     */
+    const askFieldFlow = async (): Promise<ConversationResult> => {
+      const submissionId = ctx.confirmSubmissionId; const field = ctx.pendingField;
+      if (!submissionId || !field) return home();
+      const request = await this.deps.intake.confirmationFor(submissionId);
+      const reference = request?.reference ?? "";
+      const label = FIELD_PROMPTS[field] ?? field;
+      if (intent === "BACK") { await save("HOME", { ...ctx, confirmSubmissionId: undefined, pendingField: undefined }); return reply("HOME", render(M, "cancel")); }
+      // A photo is always a receipt. Someone who sends another one while we are
+      // asking about the last is submitting again, not answering badly.
+      if (isImage) return captureFlow();
+      if (intent === "UNSUPPORTED") return reply("ASK_FIELD", render(M, "confirm_missing", { reference, field: label }));
+
+      if (field === "outletId") {
+        if (number != null && ctx.pendingNav?.[number - 1]) {
+          const pick = ctx.pendingNav[number - 1];
+          await this.deps.intake.applyUserEvidence(submissionId, { outletId: pick.value });
+          await save("HOME", { ...ctx, confirmSubmissionId: undefined, pendingField: undefined, pendingNav: undefined });
+          return reply("HOME", render(M, "confirm_recorded", { reference }));
+        }
+        // A number with nothing to pick from, or "list", opens the same shop
+        // browse the campaign has always had.
+        if (text === "list" || (number != null && !ctx.pendingNav)) return browseForAnswer();
+        if (text.length < 2) return reply("ASK_FIELD", render(M, "confirm_missing_outlet", { reference }));
+        const options = await searchOutlets(text);
+        if (!options.length) return reply("ASK_FIELD", render(M, "outlet_no_match", { query: text.slice(0, 40) }));
+        await save("ASK_FIELD", { ...ctx, pendingNav: options.map((o) => ({ label: o.label, value: o.value })) });
+        return reply("ASK_FIELD", render(M, "outlet_search", { options: fmtOptions(options) }));
+      }
+
+      const value = parseFieldAnswer(field, text);
+      if (value == null) return reply("ASK_FIELD", render(M, "confirm_missing_retry", { field: label }));
+      await this.deps.intake.applyUserEvidence(submissionId, { [field]: value });
+      await save("HOME", { ...ctx, confirmSubmissionId: undefined, pendingField: undefined });
+      return reply("HOME", render(M, "confirm_recorded", { reference }));
     };
 
     switch (state) {
@@ -263,9 +419,14 @@ export class ConversationEngine {
         if (intent === "WINNERS") return this.winnersFlow({ cid, M, ctx, state, number, fresh: true, save, reply });
         if (intent === "STATUS") return statusText();
         if (isImage) {
-          // A further photo after a submission (or a re-upload request) reuses the outlet the participant chose; the
-          // acknowledgement names it and says how to change it. The header cross-check still catches a wrong shop.
-          if (participant && enrollment && !enrollment.withdrawnAt && ctx.outletId && ctx.lastSubmissionId && !controls.pauseIntake && campaign.status === "active") return receiptFlow({ remembered: true });
+          // A photo IS the entry. Capture-first means an enrolled participant
+          // who simply sends a receipt gets it processed, without first
+          // navigating a menu: "take a picture and the system does the rest" is
+          // the whole point. It used to require that they had already chosen a
+          // shop and submitted once before, so the most natural thing a person
+          // can do — send the photo — was the one path that did nothing.
+          if (participant && enrollment && !enrollment.withdrawnAt && !controls.pauseIntake && campaign.status === "active") return captureFlow();
+          if (participant && enrollment && !enrollment.withdrawnAt && controls.pauseIntake) return reply("HOME", render(M, "paused"));
           return reply("HOME", [render(M, "need_photo"), menu()]);
         }
         if (intent === "BACK") return home();
@@ -275,6 +436,9 @@ export class ConversationEngine {
       case "OUTLET": return outletFlow();
       case "OUTLET_CONFIRM": return outletConfirmation();
       case "RECEIPT": return receiptFlow();
+      case "CAPTURE": return captureFlow();
+      case "CONFIRM": return confirmFlow();
+      case "ASK_FIELD": return askFieldFlow();
       case "WINNERS": return this.winnersFlow({ cid, M, ctx, state, number, fresh: intent === "WINNERS", save, reply });
       default: return home();
     }
@@ -297,6 +461,26 @@ export class ConversationEngine {
   /** Background outcome hook: clears the active submission only if it is still the newest one. */
   async onSubmissionOutcome(campaignId: string, uid: string, submissionId: string) {
     await this.db.update(conversations).set({ activeSubmissionId: null }).where(and(eq(conversations.campaignId, campaignId), eq(conversations.channelUid, uid), eq(conversations.activeSubmissionId, submissionId)));
+  }
+
+  /**
+   * A submission has been read and now needs the participant: either to confirm
+   * what was established, or to supply the one thing that could not be.
+   *
+   * Only ever moves a conversation that is sitting at HOME. Someone mid-way
+   * through registration or talking to support is not interrupted by a
+   * background job; their confirmation waits until they are idle again.
+   */
+  async requestConfirmation(campaignId: string, uid: string, submissionId: string, pendingFields: string[]) {
+    const s = await this.session(campaignId, uid);
+    if (!s || s.handoffOwner || !["HOME", "CAPTURE"].includes(s.state)) return { opened: false as const };
+    const ctx = { ...(s.context as Ctx), confirmSubmissionId: submissionId, pendingField: pendingFields[0], pendingNav: undefined };
+    const nextState = pendingFields.length ? "ASK_FIELD" : "CONFIRM";
+    const r = await this.db.update(conversations)
+      .set({ state: nextState, context: ctx as Record<string, unknown>, version: s.version + 1, updatedAt: new Date().toISOString() })
+      .where(and(eq(conversations.id, s.id), eq(conversations.version, s.version)))
+      .returning({ id: conversations.id });
+    return { opened: r.length > 0, state: nextState };
   }
   async claimHandoff(campaignId: string, uid: string, operatorId: string) {
     const s = await this.session(campaignId, uid);

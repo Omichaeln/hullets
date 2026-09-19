@@ -244,6 +244,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bubble.in { align-self: flex-start; background: var(--tt-surface-2); border-bottom-left-radius: 4px; } .bubble.out { align-self: flex-end; background: var(--tt-primary-soft); border-bottom-right-radius: 4px; color: var(--tt-text); }
 .bubble .meta { display: block; font-size: 10.5px; color: var(--tt-text-3); margin-top: 3px; }
 .rule-list { display: grid; gap: 4px; font-size: 12.5px; } .rule-list > div { display: flex; gap: 8px; align-items: baseline; }
+/* Reasoning lists in the evidence chain: one stated reason per line, so the
+   verdict reads as a set of components rather than one opaque score. */
+.tt-list { margin: 0; padding-left: var(--tt-s3); display: grid; gap: 2px; font-size: 12.5px; }
+.tt-list > li { color: var(--tt-text-2); }
+.tt-muted { color: var(--tt-text-3); font-size: 12.5px; margin: var(--tt-s2) 0 0; }
 .progress { height: 6px; background: var(--tt-surface-2); border-radius: 999px; overflow: hidden; } .progress > i { display: block; height: 100%; background: var(--tt-primary); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 

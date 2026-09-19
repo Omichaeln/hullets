@@ -4,8 +4,13 @@
   "private": true,
   "description": "WhatsApp receipt-promotion platform: registration, real receipt extraction, deterministic qualification, duplicate prevention, auditable draws, winner lifecycle, CRM sync and an operations console.",
   "type": "module",
-  "engines": { "node": ">=22.12" },
-  "workspaces": ["packages/*", "apps/*"],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "preflight": "tsx tools/preflight.ts",
     "db:generate": "drizzle-kit generate --config packages/db/drizzle.config.ts",
@@ -35,7 +40,9 @@
     "crm:receiver": "tsx tools/crm-receiver.ts",
     "smoke": "tsx tools/smoke.ts",
     "audit:deps": "npm audit --omit=dev --audit-level=high",
-    "check": "npm run typecheck && npm run lint && npm test && npm run console:build && npm run audit:deps"
+    "check": "npm run typecheck && npm run lint && npm test && npm run console:build && npm run audit:deps",
+    "fixtures:qr": "tsx tools/gen-qr-fixture.ts",
+    "gen:env": "tsx tools/gen-env-example.ts"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
@@ -43,6 +50,7 @@
     "@types/pg": "^8.15.0",
     "@typescript-eslint/eslint-plugin": "^8.30.0",
     "@typescript-eslint/parser": "^8.30.0",
+    "@zxing/library": "^0.21.3",
     "drizzle-kit": "^0.31.0",
     "eslint": "^9.25.0",
     "playwright": "^1.63.0",

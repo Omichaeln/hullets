@@ -20,6 +20,24 @@ export const staffUsers = pgTable("staff_users", {
   createdBy: text("created_by"), lastLoginAt: ts("last_login_at"), createdAt: created(), updatedAt: ts("updated_at").notNull().defaultNow(),
 }, (t) => [uniqueIndex("uq_staff_email").on(t.email)]);
 
+/**
+ * Failed-authentication counters and pending MFA challenges.
+ *
+ * Both used to live in a per-process Map. That made the login throttle reset on
+ * every deploy and multiply by replica count, and it made MFA outright broken
+ * above one replica: a challenge issued by one process could not be verified by
+ * another. Both are small, short-lived and swept by housekeeping.
+ */
+export const authAttempts = pgTable("auth_attempts", {
+  key: text("key").primaryKey(), kind: text("kind").notNull(), failures: integer("failures").notNull().default(0),
+  windowStartedAt: ts("window_started_at").notNull().defaultNow(), lastFailureAt: ts("last_failure_at").notNull().defaultNow(),
+}, (t) => [index("ix_auth_attempts_window").on(t.windowStartedAt)]);
+
+export const mfaChallenges = pgTable("mfa_challenges", {
+  id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => staffUsers.id), attempts: integer("attempts").notNull().default(0),
+  expiresAt: ts("expires_at").notNull(), consumedAt: ts("consumed_at"), ip: text("ip"), createdAt: created(),
+}, (t) => [index("ix_mfa_challenge_user").on(t.userId), index("ix_mfa_challenge_expiry").on(t.expiresAt)]);
+
 export const staffSessions = pgTable("staff_sessions", {
   id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => staffUsers.id), tokenHash: text("token_hash").notNull(),
   expiresAt: ts("expires_at").notNull(), revokedAt: ts("revoked_at"), ip: text("ip"), createdAt: created(),
@@ -111,22 +129,72 @@ export const mediaAssets = pgTable("media_assets", {
   id: text("id").primaryKey(), campaignId: text("campaign_id"), storageKey: text("storage_key").notNull(), normalizedKey: text("normalized_key"), mime: text("mime").notNull(), bytes: integer("bytes").notNull(),
   width: integer("width"), height: integer("height"), sha256: text("sha256").notNull(), ahash: text("ahash"), dhash: text("dhash"), quality: jsonb("quality").$type<Record<string, unknown> | null>(),
   status: text("status").notNull().default("stored"), createdAt: created(), expiresAt: ts("expires_at"),
-}, (t) => [index("ix_media_sha").on(t.sha256), index("ix_media_dhash").on(t.dhash)]);
+}, (t) => [index("ix_media_sha").on(t.sha256), index("ix_media_expiry").on(t.status, t.expiresAt)]);
 
 export const submissions = pgTable("submissions", {
   id: text("id").primaryKey(), reference: text("reference").notNull(), campaignId: text("campaign_id").notNull().references(() => campaigns.id), campaignVersionId: text("campaign_version_id").notNull().references(() => campaignVersions.id),
   participantId: text("participant_id").notNull().references(() => participants.id), conversationId: text("conversation_id"), inboundEventId: text("inbound_event_id"), providerMessageId: text("provider_message_id").notNull(),
   mediaAssetId: text("media_asset_id").references(() => mediaAssets.id), selectedOutletId: text("selected_outlet_id").references(() => outlets.id), periodCode: text("period_code"),
   status: text("status").notNull().default("received"), reasonCode: text("reason_code"), canonicalReceiptId: text("canonical_receipt_id"), reuploadOf: text("reupload_of"),
+  // Evidence provenance for this submission's decision: which tier of the
+  // decision hierarchy it landed in, and the strongest source that established
+  // its facts. Denormalised onto the submission so the queue, the exports and
+  // the reviewer can filter on it without joining the evidence tables.
+  verificationTier: text("verification_tier"), authority: text("authority"), fiscalStatus: text("fiscal_status"),
+  // Fields the participant still has to confirm or supply, and what they said.
+  pendingFields: jsonb("pending_fields").$type<string[]>().notNull().default([]),
+  userEvidence: jsonb("user_evidence").$type<Record<string, unknown>>().notNull().default({}),
   version: integer("version").notNull().default(1), eventAt: ts("event_at"), intakeAt: ts("intake_at").notNull().defaultNow(), decidedAt: ts("decided_at"), decidedBy: text("decided_by"),
   correlationId: text("correlation_id"), createdAt: created(),
-}, (t) => [uniqueIndex("uq_submission_message").on(t.providerMessageId), uniqueIndex("uq_submission_ref").on(t.reference), index("ix_submission_campaign").on(t.campaignId, t.status, t.createdAt), index("ix_submission_participant").on(t.participantId, t.createdAt), index("ix_submission_period").on(t.campaignId, t.periodCode, t.status)]);
+}, (t) => [uniqueIndex("uq_submission_message").on(t.providerMessageId), uniqueIndex("uq_submission_ref").on(t.reference), index("ix_submission_campaign").on(t.campaignId, t.status, t.createdAt), index("ix_submission_participant").on(t.participantId, t.createdAt), index("ix_submission_period").on(t.campaignId, t.periodCode, t.status), index("ix_submission_outlet").on(t.campaignId, t.selectedOutletId, t.createdAt)]);
 
 export const extractions = pgTable("extractions", {
   id: text("id").primaryKey(), submissionId: text("submission_id").notNull().references(() => submissions.id), attemptNo: integer("attempt_no").notNull(), provider: text("provider").notNull(), model: text("model").notNull(),
   promptVersion: text("prompt_version"), schemaVersion: text("schema_version").notNull(), ocrText: text("ocr_text"), facts: jsonb("facts").$type<Record<string, unknown>>(), ruleResults: jsonb("rule_results").$type<unknown[]>(),
   disposition: text("disposition"), confidence: real("confidence"), latencyMs: integer("latency_ms"), raw: jsonb("raw").$type<Record<string, unknown> | null>(), error: text("error"), createdAt: created(),
 }, (t) => [uniqueIndex("uq_extraction_attempt").on(t.submissionId, t.attemptNo)]);
+
+/**
+ * Fiscal (ZIMRA FDMS) verification of one submission.
+ *
+ * The authoritative transaction record when one exists: retrieved from the
+ * revenue authority using the identifiers carried in the receipt's fiscal QR
+ * code, not parsed out of the image. Stored whole — including the failure
+ * cases — because "we looked and the authority said nothing" is evidence too.
+ * Identity columns are indexed for duplicate lookup; enforcement stays on
+ * canonical_receipts, which is where every award path already converges.
+ */
+export const fiscalVerifications = pgTable("fiscal_verifications", {
+  id: text("id").primaryKey(), submissionId: text("submission_id").notNull().references(() => submissions.id), campaignId: text("campaign_id").notNull(),
+  status: text("status").notNull(), adapter: text("adapter").notNull(), contractVersion: text("contract_version").notNull(), errorCode: text("error_code"), latencyMs: integer("latency_ms"),
+  qrPayloadSha256: text("qr_payload_sha256"), qrFormat: text("qr_format"), qrHost: text("qr_host"),
+  deviceId: text("device_id"), fiscalDayNo: integer("fiscal_day_no"), receiptGlobalNo: text("receipt_global_no"), verificationCode: text("verification_code"), invoiceNo: text("invoice_no"),
+  merchantTin: text("merchant_tin"), merchantName: text("merchant_name"), branchName: text("branch_name"), branchCode: text("branch_code"),
+  txnAt: ts("txn_at"), txnDate: text("txn_date"), currency: text("currency"), totalMinor: integer("total_minor"), taxMinor: integer("tax_minor"),
+  lines: jsonb("lines").$type<unknown[] | null>(), raw: jsonb("raw").$type<Record<string, unknown> | null>(),
+  fetchedAt: ts("fetched_at"), createdAt: created(),
+}, (t) => [
+  uniqueIndex("uq_fiscal_submission").on(t.submissionId),
+  index("ix_fiscal_code").on(t.campaignId, t.verificationCode),
+  index("ix_fiscal_receipt").on(t.campaignId, t.deviceId, t.receiptGlobalNo),
+  index("ix_fiscal_qr").on(t.campaignId, t.qrPayloadSha256),
+]);
+
+/**
+ * One row per automated decision that a human later revisited, plus the
+ * automated decision it is being compared against. This is calibration data: it
+ * says where the machine and a reviewer disagreed and in which direction. It is
+ * never read back into a live decision, and nothing retrains from it — it is an
+ * offline evaluation set that a change has to beat before it ships.
+ */
+export const verificationOutcomes = pgTable("verification_outcomes", {
+  id: text("id").primaryKey(), submissionId: text("submission_id").notNull().references(() => submissions.id), campaignId: text("campaign_id").notNull(),
+  automatedTier: text("automated_tier").notNull(), automatedDisposition: text("automated_disposition").notNull(), automatedReason: text("automated_reason"),
+  authority: text("authority").notNull(), fiscalStatus: text("fiscal_status"), duplicateRisk: text("duplicate_risk"), anomalyRisk: text("anomaly_risk"),
+  discrepancies: jsonb("discrepancies").$type<unknown[]>().notNull().default([]), evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+  humanDecision: text("human_decision"), humanReason: text("human_reason"), humanNote: text("human_note"), decidedBy: text("decided_by"), decidedAt: ts("decided_at"),
+  agreement: text("agreement"), createdAt: created(),
+}, (t) => [index("ix_outcome_campaign").on(t.campaignId, t.createdAt), index("ix_outcome_agreement").on(t.agreement), uniqueIndex("uq_outcome_submission").on(t.submissionId)]);
 
 export const submissionItems = pgTable("submission_items", {
   id: text("id").primaryKey(), submissionId: text("submission_id").notNull().references(() => submissions.id), lineNo: integer("line_no").notNull(), rawText: text("raw_text").notNull(), description: text("description").notNull(),

@@ -11,6 +11,18 @@ minor — and each remediation is classified as **mandatory baseline**, **recomm
 
 ---
 
+> **Remediation status, 19 September 2026.** Every blocker below and every major
+> finding has been fixed, together with most of the moderate ones, in the same
+> change that introduced the evidence-first verification architecture
+> ([ADR 0010](../adr/0010-evidence-first-verification.md)). Each finding now
+> carries its status inline. `npm run check` passes: 178 tests across 20 files,
+> typecheck, lint, console build and dependency audit. CI runs it on every push.
+>
+> What remains open is listed under **Still open** at the end. The soak test with
+> real receipts at 2–3× expected peak has still not been done, and no throughput
+> number in this repository is anything other than simulated or
+> micro-benchmarked.
+
 ## Verdict
 
 **Not production-ready, and the reasons are narrower and more fixable than that phrase usually
@@ -31,12 +43,12 @@ on any write path that records an audit event.** That is measured below, not inf
 stop a launch at modest volume, but it means the scale-out plan in ADR 0007 buys less than it
 promises, and it should be understood before capacity is sized.
 
-| | |
-|---|---|
-| Ship as-is | No |
-| Ship after the six blockers below | Yes, for a campaign bounded at roughly 10,000 entries per draw period |
-| Ship at national scale | Not until the draw, duplicate and retention ceilings are lifted and a real-receipt soak test exists |
-| Estimated remediation to first safe launch | 3–5 engineering days for the blockers; 2–3 weeks for the full plan |
+| | At audit | Now |
+|---|---|---|
+| Ship as-is | No | Not yet — see **Still open** |
+| Ship for a bounded campaign | After the six blockers | **Yes.** The blockers are closed and the ceilings that bounded it are lifted |
+| Ship at national scale | Not until the ceilings are lifted and a real-receipt soak test exists | Still blocked on the **soak test**, and on confirming the FDMS contract |
+| Estimated remediation to first safe launch | 3–5 engineering days for the blockers; 2–3 weeks for the full plan | Done, bar the items below |
 
 ---
 
@@ -44,16 +56,17 @@ promises, and it should be understood before capacity is sized.
 
 Everything in this section was executed against this checkout on Node 22.22 and PostgreSQL 16.13.
 
-| Check | Result |
-|---|---|
-| `npm run typecheck` | **Pass**, clean across API, core, tools, tests and console |
-| `npm run lint` | **Pass**, clean |
-| `npm test` | **Fail — 10 of 137 tests fail** (5 of 16 files) |
-| `npm run audit:deps` | **Fails to execute** — npm rejects the package tree |
-| Draw freeze at scale | **Reproduced hard failure at 10,923 entries** (10,922 succeeds) |
-| Audit-chain write throughput | **Measured: flat at 578/s, then 75/s, independent of concurrency 1→16** |
-| Drizzle migrator locking | **Read the installed migrator — no advisory lock** |
-| CI pipeline | **Does not exist** — no `.github/`, no pipeline configuration of any kind |
+| Check | At audit (`dcace4e`) | After remediation |
+|---|---|---|
+| `npm run typecheck` | **Pass**, clean across API, core, tools, tests and console | Pass |
+| `npm run lint` | **Pass**, clean | Pass |
+| `npm test` | **Fail — 10 of 137 tests fail** (5 of 16 files) | **178 pass, 20 files** |
+| `npm run audit:deps` | **Fails to execute** — npm rejects the package tree | **Pass, 0 vulnerabilities** |
+| `npm run check` (the whole gate) | **Fails** | **Pass, exit 0** |
+| Draw freeze at scale | **Reproduced hard failure at 10,923 entries** (10,922 succeeds) | **12,500 entries freeze; regression test pins it** |
+| Audit-chain write throughput | **Measured: flat at 578/s, then 75/s, independent of concurrency 1→16** | Lock shortened; still does not scale with replicas by design |
+| Drizzle migrator locking | **Read the installed migrator — no advisory lock** | Advisory lock added; boot-time migration removed outside local/test |
+| CI pipeline | **Does not exist** — no `.github/`, no pipeline configuration of any kind | **`.github/workflows/ci.yml` on every push** |
 
 Not verified, and flagged as such throughout: live Meta Cloud API behaviour, real S3 behaviour,
 Anthropic and OpenAI verification paths, and end-to-end throughput with real OCR under sustained
@@ -63,7 +76,7 @@ load. Those need an environment this audit did not have.
 
 ## Blockers
 
-### B-1 · The draw cannot be frozen above 10,922 entries — reproduced
+### B-1 · The draw cannot be frozen above 10,922 entries — reproduced · **FIXED**
 
 `DrawService.freeze()` inserts every eligible entry as one `INSERT ... VALUES` statement:
 
@@ -104,7 +117,7 @@ Move exclusions to a separate `status`-discriminated ordering rather than a magi
 test that freezes a period with 25,000 synthetic entries. The same chunking audit should be applied
 to `setCampaignOutlets` and `importOutletsCsv`, which share the pattern at higher row counts.
 
-### B-2 · The login throttle is bypassable with a request header — read, high confidence
+### B-2 · The login throttle is bypassable with a request header — read, high confidence · **FIXED**
 
 `server.ts` sets `ex.set("trust proxy", true)`. With every proxy trusted, `req.ip` is the leftmost
 value of the client's own `X-Forwarded-For` header. The login throttle keys on it:
@@ -138,7 +151,7 @@ factor.
    by replica count and resets on every deploy. A `staff_login_attempts` table, or the edge proxy,
    is the right home.
 
-### B-3 · The QR fiscal fallback lets a third-party server decide qualification — read, high confidence
+### B-3 · The QR fiscal fallback lets a third-party server decide qualification — read, high confidence · **FIXED**
 
 This is the newest feature (ADR 0008, dated today) and it is the one I would not launch with.
 
@@ -188,7 +201,7 @@ security property does not hold.
 `QR_FALLBACK_ENABLED=false` is a valid interim mitigation and the ADR already documents it as the
 rollback switch. I would set it now and leave it off until (1) and (2) ship.
 
-### B-4 · Duplicate detection silently stops covering older receipts at 4,000 submissions — read, high confidence
+### B-4 · Duplicate detection silently stops covering older receipts at 4,000 submissions — read, high confidence · **FIXED**
 
 ```ts
 .orderBy(desc(submissions.createdAt)).limit(4000);
@@ -214,7 +227,7 @@ drawn from a blocking key (same outlet, ±3 days). Failing that, at minimum: sco
 outlet and date rather than by row count, and raise an alert when a campaign's submission count
 exceeds the window so the degradation is visible rather than silent.
 
-### B-5 · `npm run check` — the release gate — fails, and nothing runs it anyway
+### B-5 · `npm run check` — the release gate — fails, and nothing runs it anyway · **FIXED**
 
 There is no CI. No `.github/`, no pipeline of any kind. `npm run check` is documented as the gate
 and exists only as a script someone has to remember to type.
@@ -254,7 +267,7 @@ it. Then: triage the ten failures — update the eight copy assertions, diagnose
 control is now *meant* to be. Resolve the peer-dependency conflict so the tree is auditable, or
 replace `npm audit` with a scanner that reads the lockfile directly.
 
-### B-6 · Concurrent migrations on deploy — read the installed migrator, high confidence
+### B-6 · Concurrent migrations on deploy — read the installed migrator, high confidence · **FIXED**
 
 Migrations run twice per process and once per replica: `railway.json`'s start command runs
 `db:migrate`, and then `createApp()` runs `migrate(db)` again on boot.
@@ -281,7 +294,7 @@ Railway pre-deploy command rather than in the service start path.
 
 ## Major findings
 
-### M-1 · Audited writes do not scale horizontally — measured
+### M-1 · Audited writes do not scale horizontally — measured · **MITIGATED**
 
 `AuditService.record()` takes a single global advisory lock, held for the remainder of the caller's
 transaction:
@@ -321,7 +334,7 @@ between 75/s and 578/s. If more headroom is needed later, the chain can be shard
 a lock key derived from `campaignId` — the chain's purpose is per-campaign tamper evidence, not a
 single global sequence.
 
-### M-2 · The CRM event escapes the transaction it is documented to be inside
+### M-2 · The CRM event escapes the transaction it is documented to be inside · **FIXED**
 
 `ReceiptPipeline.commit()` is documented as "ONE transaction committing decision, award, audit,
 participant message and CRM event". Four of those five are in the transaction. `CrmService.emit()`
@@ -348,7 +361,7 @@ method reachable from inside a transaction for `this.db` usage; a lint rule or a
 transaction-scoped wrapper type would prevent recurrence. Separately, size `DB_POOL_MAX` against
 `HTTP_MAX_IN_FLIGHT` — 200 in-flight requests against 10 connections is a queue, not a pool.
 
-### M-3 · `audit.verify()` loads the entire audit table into memory
+### M-3 · `audit.verify()` loads the entire audit table into memory · **FIXED**
 
 ```ts
 const rows = await this.db.select({ … }).from(auditEvents).where(gt(auditEvents.id, fromId)).orderBy(asc(auditEvents.id));
@@ -364,7 +377,7 @@ previous page's head hash — the function already accepts `fromId`, so the shap
 progress rather than a single verdict, and run full verification as a job rather than a synchronous
 request. The signed checkpoints already make incremental verification sound.
 
-### M-4 · Housekeeping's scheduling degrades from daily to roughly once a minute
+### M-4 · Housekeeping's scheduling degrades from daily to roughly once a minute · **FIXED**
 
 `completeJob()` nulls the dedupe key on success:
 
@@ -389,7 +402,7 @@ mislead whoever debugs this later.
 instead (add `dedupe_until`, or include the key in a `completed_dedupe` uniqueness window). Assert
 the intended cadence in a test.
 
-### M-5 · `reviewQueue()` is unbounded and is called by the alerting path
+### M-5 · `reviewQueue()` is unbounded and is called by the alerting path · **FIXED**
 
 ```ts
 const open = await this.db.select({ … }).from(reviewTasks).innerJoin(submissions, …).innerJoin(participants, …).where(ne(reviewTasks.state, "decided")).orderBy(asc(reviewTasks.createdAt));
@@ -409,7 +422,7 @@ it.
 aggregate queries returning counts, oldest and overdue — that is all housekeeping needs. The console
 listing keeps a paginated `items` query with an explicit limit.
 
-### M-6 · A 20 MB JSON body limit against a 200-request admission budget
+### M-6 · A 20 MB JSON body limit against a 200-request admission budget · **FIXED**
 
 ```ts
 ex.use("/trpc", (req, res, next) => { if (!admit(req, res, "api")) return; next(); }, express.json({ limit: "20mb" }), …)
@@ -654,3 +667,47 @@ surfaces after an incident.
 
 The problems in this report are real and several are serious. None of them are in the parts that
 would have been hardest to get right.
+
+---
+
+## Still open
+
+What the remediation did **not** close, stated plainly so this report is not read as saying the
+system is finished.
+
+**The FDMS contract is unverified.** The ZIMRA QR layout and the validation endpoint shape were
+implemented without the published specification or a test device. Both are configuration
+(`FISCAL_QR_LAYOUT`, `FISCAL_BASE_URL`) and the adapter is a single class, but until they are
+confirmed against a real fiscal receipt the fiscal path is untested against reality. It ships
+disabled (`FISCAL_PROVIDER=none`) for exactly that reason. See ADR 0010's rollout steps.
+
+**The soak test has still not been done.** ADR 0007 requires a run with real receipts at 2–3× expected
+peak, with real OCR, sustained. Every throughput number in this repository — including every number
+in this report — is simulated or micro-benchmarked. The 12,500-entry draw test proves the freeze
+statement, not the system under load.
+
+**The audit chain still does not scale horizontally.** M-1's lock is shorter, so the ceiling is
+higher, but it remains a global serialisation point by design. Sharding the chain per campaign is
+the next step if the measured ceiling becomes binding; it has not been taken, because nothing yet
+runs at a volume that needs it.
+
+**Moderate findings not yet addressed:** Md-3 (no caching on the campaign read path), Md-4 (`metrics`
+is an unbounded time series in the transactional database), Md-7 (TypeScript is run through `tsx` in
+production and the runtime image carries the full dev dependency tree). None is a correctness
+problem; all three are volume problems that will arrive together.
+
+**Minor findings not yet addressed:** Mn-2 (claim references hashed with unsalted SHA-256 rather than
+the keyed fingerprint), Mn-3 (40-bit submission references, globally unique rather than per
+campaign), Mn-6 (`ilike '%…%'` participant search with no trigram index), Mn-7 (media stored outside
+the submission transaction), Mn-8 (phone normalisation on staff-entered numbers), Mn-9 (alert
+de-duplication by select-then-insert), Mn-11 (the test suite writes into the committed evidence
+directory).
+
+**MFA is still opt-in.** Md-1's mechanism is fixed — challenges persist, so MFA works across
+replicas, and both authentication steps are throttled in the database — but no policy requires MFA
+for `draw_approver`, `fulfilment`, `auditor` or `platform_admin`. That is a product decision rather
+than a defect, and it should be made before launch.
+
+**Two extraneous packages remain in the tree** (`@emnapi/runtime`, `@img/sharp-wasm32`, both optional
+sharp dependencies). They no longer break `npm audit`, which now runs clean, but `npm ls` still
+reports them.

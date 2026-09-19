@@ -14,7 +14,12 @@ const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inl
 
 /** HTTP surface: provider webhook (durable-then-ack), tRPC API, authenticated media/exports, health, static console. */
 export function createHttpServer(app: App) {
-  const ex = express(); ex.disable("x-powered-by"); ex.set("trust proxy", true);
+  const ex = express(); ex.disable("x-powered-by");
+  // Trust exactly as many proxy hops as are actually deployed. `true` trusted
+  // every hop, which makes req.ip the leftmost value of a header the client
+  // writes — so anything keyed on it (throttles, audit trails) was keyed on
+  // attacker-supplied data.
+  ex.set("trust proxy", app.cfg.TRUSTED_PROXY_HOPS === 0 ? false : app.cfg.TRUSTED_PROXY_HOPS);
   const correlation = (req: Request) => String(req.headers["x-correlation-id"] ?? "").slice(0, 64) || `req_${crypto.randomBytes(8).toString("hex")}`;
   let inFlight = 0;
   const admit = (req: Request, res: Response, kind: "webhook" | "api") => {
@@ -31,7 +36,7 @@ export function createHttpServer(app: App) {
     res.setHeader("x-correlation-id", correlation(req));
     return true;
   };
-  ex.use((req, res, next) => { const origin = String(req.headers.origin ?? ""); if (origin && app.cfg.CORS_ORIGINS.includes(origin)) { res.setHeader("access-control-allow-origin", origin); res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS"); res.setHeader("access-control-allow-headers", "content-type,authorization,x-correlation-id"); res.setHeader("vary", "Origin"); if (req.method === "OPTIONS") return res.status(204).end(); } res.setHeader("x-frame-options", "DENY"); res.setHeader("referrer-policy", "no-referrer"); res.setHeader("x-content-type-options", "nosniff"); res.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=()"); if (!req.path.startsWith("/trpc") && !req.path.startsWith("/webhooks")) res.setHeader("content-security-policy", CSP); res.setHeader("cache-control", "no-store"); next(); });
+  ex.use((req, res, next) => { const origin = String(req.headers.origin ?? ""); if (origin && app.cfg.CORS_ORIGINS.includes(origin)) { res.setHeader("access-control-allow-origin", origin); res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS"); res.setHeader("access-control-allow-headers", "content-type,authorization,x-correlation-id"); res.setHeader("vary", "Origin"); if (req.method === "OPTIONS") return res.status(204).end(); } res.setHeader("x-frame-options", "DENY"); res.setHeader("referrer-policy", "no-referrer"); res.setHeader("x-content-type-options", "nosniff"); res.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=()"); if (!req.path.startsWith("/trpc") && !req.path.startsWith("/webhooks")) res.setHeader("content-security-policy", CSP); if (req.secure || String(req.headers["x-forwarded-proto"] ?? "") === "https") res.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains"); res.setHeader("cache-control", "no-store"); next(); });
   const bearerOf = (req: Request) => { const h = String(req.headers.authorization ?? ""); return h.startsWith("Bearer ") ? h.slice(7).trim() : null; };
   const requireUser = async (req: Request, res: Response, permission: Parameters<typeof can>[1]) => { const user = await app.auth.authenticate(bearerOf(req) ?? undefined); if (!user) { res.status(401).json({ error: { code: "UNAUTHORIZED", message: "authentication required" } }); return null; } if (user.mustChangePassword || !can(user.roles, permission)) { res.status(403).json({ error: { code: "FORBIDDEN", message: "not permitted" } }); return null; } return user; };
 
@@ -51,7 +56,23 @@ export function createHttpServer(app: App) {
   });
 
   ex.get("/health/live", (_req, res) => res.json({ ok: true }));
-  ex.get("/health/ready", async (_req, res) => { try { await app.db.execute("select 1"); const x = await app.extractor.health(); const st = await app.storage.health(); const verifier = await app.verifier.health(); const ok = x.ok && st.ok && (!app.cfg.aiVerificationRequired || verifier.ok); res.status(ok ? 200 : 503).json({ ok, database: true, extractor: x, verifier, storage: st, transport: app.transport.health(), worker: app.worker.health() }); } catch (e) { res.status(503).json({ ok: false, error: (e as Error).message }); } });
+  // Readiness probes run every few seconds per replica, and three of these
+  // checks reach external services. The result is cached briefly so a probe
+  // cadence does not become a load generator against the extractor, the
+  // verifier and the object store.
+  let readiness: { at: number; body: Record<string, unknown>; ok: boolean } | null = null;
+  const READY_TTL_MS = 5_000;
+  ex.get("/health/ready", async (_req, res) => {
+    try {
+      if (!readiness || Date.now() - readiness.at > READY_TTL_MS) {
+        await app.db.execute("select 1");
+        const [x, st, verifier, fiscal] = await Promise.all([app.extractor.health(), app.storage.health(), app.verifier.health(), app.fiscal.health()]);
+        const ok = x.ok && st.ok && (!app.cfg.aiVerificationRequired || verifier.ok) && (!app.cfg.fiscalRequired || fiscal.ok);
+        readiness = { at: Date.now(), ok, body: { ok, database: true, extractor: x, verifier, fiscal, storage: st, transport: app.transport.health(), worker: app.worker.health() } };
+      }
+      res.status(readiness.ok ? 200 : 503).json(readiness.body);
+    } catch (e) { readiness = null; res.status(503).json({ ok: false, error: (e as Error).message }); }
+  });
   ex.get("/api/contract.json", (_req, res) => res.json(contractDocument()));
 
   // ---- authenticated receipt media (bearer header only; never a capability URL)
@@ -73,7 +94,12 @@ export function createHttpServer(app: App) {
   ex.get("/api/draws/:drawId/bundle.json", async (req, res) => { const user = await requireUser(req, res, "draw.bundle"); if (!user) return; try { const b = await app.draws.bundle(req.params.drawId, user.id); res.setHeader("content-disposition", `attachment; filename=draw-${req.params.drawId}.json`); res.json(b); } catch { res.status(404).end(); } });
 
   // ---- tRPC
-  ex.use("/trpc", (req, res, next) => { if (!admit(req, res, "api")) return; next(); }, express.json({ limit: "20mb" }), createExpressMiddleware({ router: appRouter, createContext: async ({ req }): Promise<Context> => { const bearer = bearerOf(req); return { app, user: bearer ? await app.auth.authenticate(bearer) : null, bearer, correlationId: correlation(req), ip: req.ip ?? "unknown" }; }, onError: ({ error, path: p }) => { if (error.code === "INTERNAL_SERVER_ERROR") app.log.error({ path: p, err: (error.cause as Error)?.message ?? error.message }, "trpc internal error"); } }));
+  // The simulator uploads a base64 image and needs room; every other procedure
+  // does not. One 20 MB limit across the whole API meant the admission budget
+  // (which counts requests, and is checked before the body is read) allowed
+  // 200 concurrent bodies of that size.
+  const uploadPaths = new Set(["/simulator.inbound"]);
+  ex.use("/trpc", (req, res, next) => { if (!admit(req, res, "api")) return; next(); }, (req, res, next) => express.json({ limit: uploadPaths.has(req.path) ? app.cfg.HTTP_UPLOAD_LIMIT : app.cfg.HTTP_JSON_LIMIT })(req, res, next), createExpressMiddleware({ router: appRouter, createContext: async ({ req }): Promise<Context> => { const bearer = bearerOf(req); return { app, user: bearer ? await app.auth.authenticate(bearer) : null, bearer, correlationId: correlation(req), ip: req.ip ?? "unknown" }; }, onError: ({ error, path: p }) => { if (error.code === "INTERNAL_SERVER_ERROR") app.log.error({ path: p, err: (error.cause as Error)?.message ?? error.message }, "trpc internal error"); } }));
 
   // ---- console (built assets) with SPA fallback
   if (fs.existsSync(path.join(CONSOLE_DIST, "index.html"))) { ex.use(express.static(CONSOLE_DIST, { index: false, maxAge: "1h", setHeaders: (r, p) => { if (p.endsWith(".html")) r.setHeader("cache-control", "no-cache"); } })); ex.get(/^\/(?!trpc|api|webhooks|health).*/, (_req, res) => res.sendFile(path.join(CONSOLE_DIST, "index.html"))); }

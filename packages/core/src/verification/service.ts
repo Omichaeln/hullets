@@ -33,7 +33,7 @@ function emptyAssessment(status: VerificationAssessment["status"], provider: str
 }
 
 function payloadFor(input: { facts: Facts; evaluation: Evaluation; rules: Rules; duplicateSignals: { exact: number; visual: number } }) {
-  return { structured_receipt: { document: input.facts.document, merchant: input.facts.merchant, transaction: input.facts.transaction, lines: input.facts.lines, quality: input.facts.quality, qr_evidence: input.facts.evidence.qr }, ocr_text: input.facts.ocrText.slice(0, 20_000), deterministic_validation: input.evaluation.rules, deterministic_summary: { disposition: input.evaluation.disposition, reason: input.evaluation.reason, matched: input.evaluation.matched, units: input.evaluation.units }, campaign_rules: { dateOrder: input.rules.dateOrder, purchaseWindow: input.rules.purchaseWindow, qualification: input.rules.qualification, outletMatch: input.rules.outletMatch }, duplicate_signals: input.duplicateSignals };
+  return { structured_receipt: { document: input.facts.document, merchant: input.facts.merchant, transaction: input.facts.transaction, lines: input.facts.lines, quality: input.facts.quality, fiscal_evidence: input.facts.evidence.fiscal }, ocr_text: input.facts.ocrText.slice(0, 20_000), deterministic_validation: input.evaluation.rules, deterministic_summary: { disposition: input.evaluation.disposition, reason: input.evaluation.reason, matched: input.evaluation.matched, units: input.evaluation.units }, campaign_rules: { dateOrder: input.rules.dateOrder, purchaseWindow: input.rules.purchaseWindow, qualification: input.rules.qualification, outletMatch: input.rules.outletMatch }, duplicate_signals: input.duplicateSignals };
 }
 
 export class AiVerificationService {

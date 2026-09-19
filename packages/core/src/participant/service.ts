@@ -20,9 +20,9 @@ export const maskIdentity = (v: string) => { const s = normIdentity(v); return s
 export class ParticipantService {
   private cipher: FieldCipher;
   /** CRM sink for participant changes (set after construction to avoid a wiring cycle). Only masked fields ever leave. */
-  crm: { emit(e: { entityType: string; entityId: string; entityVersion: number; payload: Record<string, unknown> }): Promise<unknown> } | null = null;
+  crm: { emit(tx: DbOrTx, e: { entityType: string; entityId: string; entityVersion: number; payload: Record<string, unknown> }): Promise<unknown> } | null = null;
   constructor(private db: Db, private audit: AuditService, dataKey: string, private defaultCountryCode: string) { this.cipher = new FieldCipher(dataKey || "local-only-dev-key", "identity"); }
-  private async sync(id: string) { const p = await this.get(id); if (p) await this.crm?.emit({ entityType: "participant", entityId: p.id, entityVersion: p.version, payload: { firstName: p.firstName, surname: p.surname, phone: p.status === "deleted" ? null : maskPhone(p.channelUid), location: p.location, status: p.status } }); return p!; }
+  private async sync(id: string) { const p = await this.get(id); if (p) await this.crm?.emit(this.db, { entityType: "participant", entityId: p.id, entityVersion: p.version, payload: { firstName: p.firstName, surname: p.surname, phone: p.status === "deleted" ? null : maskPhone(p.channelUid), location: p.location, status: p.status } }); return p!; }
   uid(raw: string) { return normalisePhone(raw, this.defaultCountryCode); }
   mask(p: Participant | null) { return p ? { id: p.id, firstName: p.firstName, surname: p.surname, location: p.location, status: p.status, phone: maskPhone(p.channelUid), identityMask: p.identityMask, identityVerifiedAt: p.identityVerifiedAt, version: p.version, createdAt: p.createdAt } : null; }
   async byUid(uid: string) { const [p] = await this.db.select().from(participants).where(and(eq(participants.channel, "whatsapp"), eq(participants.channelUid, uid))); return p ?? null; }

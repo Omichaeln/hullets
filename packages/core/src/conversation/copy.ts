@@ -21,6 +21,19 @@ export const MESSAGES: Record<string, string> = {
   help: "Help: reply 1 to register, 2 to enter, 3 for how it works, 4 for the terms, 5 for prizes, 6 for winners, 9 for help. MENU returns to the start, BACK goes one step back, CANCEL stops what you are doing. Reply SUPPORT to talk to a person.",
   cancel: "Cancelled. Reply MENU to start again.",
   need_photo: "Please send a PHOTO of your receipt (camera or gallery). Voice notes, stickers and text cannot be checked. Reply MENU to go back.",
+  // Capture-first. The receipt is the input; where it was bought, when, and for
+  // how much are things the system works out — the participant is asked to
+  // confirm, and only asked to supply what nothing else could establish.
+  capture_prompt: "Send a PHOTO of your receipt.\n\nIf it has a QR code, include it in the photo — we will read it and check the receipt with ZIMRA automatically.\n\nReply MENU to go back.",
+  capture_received: "Thanks! We're reading your receipt now. Reference {reference}.\n\nWe'll come back to you in a moment.",
+  confirm_details: "Here's what we read from your receipt {reference}:\n{details}\n\nIs this correct?\n1. Yes, that's correct\n2. No, something is wrong",
+  confirm_detail_line: "{label}: {value}",
+  confirm_thanks: "Thank you — your entry is being finalised. Reference {reference}.",
+  confirm_rejected: "Thanks for telling us. We've sent receipt {reference} to our team to check by hand. We'll message you when it's done.",
+  confirm_missing: "We read receipt {reference}, but we couldn't work out {field}.\n\nPlease reply with it.",
+  confirm_missing_outlet: "We read receipt {reference}, but we couldn't work out which shop it came from.\n\nReply with the shop, branch or town to search, or MENU to go back.",
+  confirm_missing_retry: "Sorry, that didn't work. Please reply with {field}, or SUPPORT to talk to a person.",
+  confirm_recorded: "Thank you. We're checking that against your receipt now. Reference {reference}.",
   media_missing: "We couldn't download that image. Please send the photo again.",
   media_rejected: "That file couldn't be used ({reason}). Please send a clear JPEG or PNG photo of the receipt.",
   not_registered: "You need to register first — it takes a minute. Reply 1 to register.",

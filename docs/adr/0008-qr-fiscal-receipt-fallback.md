@@ -1,6 +1,7 @@
 # ADR 0008: QR-enabled fiscal-receipt fallback
 
-- **Status:** accepted for implementation
+- **Status:** SUPERSEDED by [ADR 0010](0010-evidence-first-verification.md), 19 September 2026. The fallback described here fetched whatever HTTPS URL a QR code contained, with an empty allowlist permitting any public host, and let the response supply the facts an entry was judged on whenever OCR read nothing. ADR 0010 replaces it: a decoded code now yields identifiers that are looked up against a configured, allowlisted validation endpoint, and the authority's answer — never the code — is evidence. Retained for the record.
+- **Superseded status:** was accepted for implementation
 - **Date:** 2026-09-19
 - **Decision owners:** Engineering and campaign operations
 

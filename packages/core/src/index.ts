@@ -14,6 +14,7 @@ export { ConversationEngine, render, reasonText, parseIntent } from "./conversat
 export { MESSAGES, REASON_TEXT } from "./conversation/copy.ts";
 export * from "./extraction/index.ts";
 export { evaluate } from "./eligibility/rules.ts";
+export * from "./fiscal/index.ts";
 export type { Evaluation, Disposition, RuleResult } from "./eligibility/rules.ts";
 export { ReceiptPipeline, receiptKey } from "./receipt/pipeline.ts";
 export * from "./draw/engine.ts";

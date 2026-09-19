@@ -16,7 +16,7 @@ const P = Number(process.env.LOAD_PARTICIPANTS ?? 40), R = Number(process.env.LO
 const h = await buildApp({ extractor: "simulator" });
 const phones = Array.from({ length: P }, (_, i) => `2637790${String(i + 1).padStart(5, "0")}`);
 console.error(`[load] registering ${P} participants`); const t0 = Date.now();
-for (const [i, p] of phones.entries()) { await h.register(p, { first: "Load", last: `Tester${"ABCDEFGHIJ"[i % 10]}`, identity: `TESTLD${i}X` }); await h.selectOutlet(p); }
+for (const [i, p] of phones.entries()) { await h.register(p, { first: "Load", last: `Tester${"ABCDEFGHIJ"[i % 10]}`, identity: `TESTLD${i}X` }); await h.answerOutlet(p); }
 const setupMs = Date.now() - t0;
 console.error(`[load] queueing ${R} receipt images (${Math.round(R * 0.1)} of them duplicates) + ${R} status messages without processing`);
 const images: Array<{ phone: string; img: Buffer }> = [];
