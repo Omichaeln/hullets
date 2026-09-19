@@ -41,6 +41,16 @@ export const CONFIG_DOC: Array<{ name: string; default: string; description: str
   { name: "ANTHROPIC_MODEL", default: "claude-sonnet-5", description: "Vision model id." },
   { name: "ANTHROPIC_BASE_URL", default: "", description: "Optional API base override." },
   { name: "EXTRACTION_TIMEOUT_MS", default: "45000", description: "Per-image extraction timeout." },
+  { name: "QR_FALLBACK_ENABLED", default: "true", description: "Try QR/barcode fiscal-receipt evidence when OCR is incomplete." },
+  { name: "QR_FETCH_TIMEOUT_MS", default: "8000", description: "Per-hop HTTPS timeout for a decoded fiscal receipt URL." },
+  { name: "QR_FETCH_MAX_BYTES", default: "1000000", description: "Maximum fiscal document response size." },
+  { name: "QR_FETCH_MAX_REDIRECTS", default: "3", description: "Maximum HTTPS redirect hops for fiscal receipt retrieval." },
+  { name: "QR_ALLOWED_HOSTS", default: "", description: "Optional comma-separated fiscal host allowlist; empty permits public HTTPS hosts after SSRF checks." },
+  { name: "AI_VERIFICATION_ENABLED", default: "false", description: "Run advisory AI receipt verification after deterministic extraction." },
+  { name: "AI_VERIFICATION_REQUIRED", default: "false", description: "Treat missing AI verification as a hold/review condition." },
+  { name: "AI_VERIFICATION_MODEL", default: "claude-sonnet-5", description: "Anthropic model used for receipt verification." },
+  { name: "AI_VERIFICATION_TIMEOUT_MS", default: "60000", description: "AI verification request timeout." },
+  { name: "AI_VERIFICATION_MIN_PROBABILITY", default: "0.98", description: "Uncalibrated model signal below this value is held for review; it is not a calibrated probability." },
   { name: "CRM_PROVIDER", default: "none", description: "none | http-contract (generic JSON contract; see docs/integrations/crm.md) — vendor adapter is a client decision (D-19)." },
   { name: "CRM_BASE_URL", default: "", description: "Base URL of the CRM contract endpoint." },
   { name: "CRM_TOKEN", default: "", description: "Bearer token for the CRM endpoint.", secret: true },
@@ -66,11 +76,11 @@ const Env = z.object({
   MEDIA_ROOT: z.string().default("./data/media"), STORAGE_DRIVER: z.enum(["fs", "s3"]).default("fs"), S3_BUCKET: z.string().default(""), S3_PREFIX: z.string().default("media"), S3_ENDPOINT: z.string().default(""), S3_REGION: z.string().default("us-east-1"), S3_ACCESS_KEY_ID: z.string().default(""), S3_SECRET_ACCESS_KEY: z.string().default(""),
   BOOTSTRAP_ADMIN_EMAIL: z.string().default(""), BOOTSTRAP_ADMIN_PASSWORD: z.string().default(""), DATA_KEY: z.string().default(""), AUDIT_SIGNING_KEY: z.string().default(""), SESSION_HOURS: z.coerce.number().positive().default(12),
   DEFAULT_COUNTRY_CODE: z.string().regex(/^\d{1,3}$/).default("263"), WHATSAPP_PROVIDER: z.enum(["cloud-api", "simulator"]).default("simulator"), META_GRAPH_VERSION: z.string().default("v21.0"), META_PHONE_NUMBER_ID: z.string().default(""), META_WABA_ID: z.string().default(""), META_ACCESS_TOKEN: z.string().default(""), META_APP_SECRET: z.string().default(""), META_VERIFY_TOKEN: z.string().default(""), OUTBOUND_ALLOWLIST: z.string().default(""),
-  EXTRACTOR: z.enum(["anthropic", "tesseract", "anthropic+tesseract", "simulator"]).default("tesseract"), ANTHROPIC_API_KEY: z.string().default(""), ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"), ANTHROPIC_BASE_URL: z.string().default(""), EXTRACTION_TIMEOUT_MS: z.coerce.number().positive().default(45_000),
+  EXTRACTOR: z.enum(["anthropic", "tesseract", "anthropic+tesseract", "simulator"]).default("tesseract"), ANTHROPIC_API_KEY: z.string().default(""), ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"), ANTHROPIC_BASE_URL: z.string().default(""), EXTRACTION_TIMEOUT_MS: z.coerce.number().positive().default(45_000), QR_FALLBACK_ENABLED: z.string().default("true"), QR_FETCH_TIMEOUT_MS: boundedInt(8_000, 1_000, 30_000), QR_FETCH_MAX_BYTES: boundedInt(1_000_000, 16_384, 10_000_000), QR_FETCH_MAX_REDIRECTS: boundedInt(3, 0, 5), QR_ALLOWED_HOSTS: z.string().default(""), AI_VERIFICATION_ENABLED: z.string().default("false"), AI_VERIFICATION_REQUIRED: z.string().default("false"), AI_VERIFICATION_MODEL: z.string().default("claude-sonnet-5"), AI_VERIFICATION_TIMEOUT_MS: boundedInt(60_000, 5_000, 120_000), AI_VERIFICATION_MIN_PROBABILITY: z.coerce.number().min(0).max(1).default(0.98),
   CRM_PROVIDER: z.enum(["none", "http-contract"]).default("none"), CRM_BASE_URL: z.string().default(""), CRM_TOKEN: z.string().default(""), CRM_TIMEOUT_MS: z.coerce.number().positive().default(10_000), REVIEW_SLA_HOURS: z.coerce.number().positive().default(24), CLAIM_WINDOW_DAYS: z.coerce.number().positive().default(7), RETENTION_MEDIA_DAYS: z.coerce.number().positive().default(90),
   WORKER_MODE: z.enum(["embedded", "external", "off"]).default("embedded"), WORKER_POLL_MS: boundedInt(1_500, 250, 60_000), WORKER_EVENT_BATCH: boundedInt(25, 1, 200), WORKER_JOB_BATCH: boundedInt(10, 1, 100), LOG_LEVEL: z.string().default("info"), SEED_ON_BOOT: z.string().default("false"),
 });
-export type Config = z.infer<typeof Env> & { isProduction: boolean; isLocal: boolean; outboundAllowlist: string[] };
+export type Config = z.infer<typeof Env> & { isProduction: boolean; isLocal: boolean; outboundAllowlist: string[]; qrAllowedHosts: string[]; qrFallbackEnabled: boolean; aiVerificationEnabled: boolean; aiVerificationRequired: boolean };
 
 export function loadDotEnv(file = process.env.ENV_FILE ?? ".env") {
   let text: string; try { text = fs.readFileSync(path.resolve(file), "utf8"); } catch { return 0; }
@@ -79,7 +89,7 @@ export function loadDotEnv(file = process.env.ENV_FILE ?? ".env") {
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (env === process.env) loadDotEnv(); const parsed = Env.safeParse(env); if (!parsed.success) throw new Error(`configuration invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`); const c = parsed.data;
-  return { ...c, isProduction: c.ENVIRONMENT === "production", isLocal: c.ENVIRONMENT === "local", outboundAllowlist: c.OUTBOUND_ALLOWLIST.split(",").map((s) => s.trim()).filter(Boolean) };
+  return { ...c, isProduction: c.ENVIRONMENT === "production", isLocal: c.ENVIRONMENT === "local", outboundAllowlist: c.OUTBOUND_ALLOWLIST.split(",").map((s) => s.trim()).filter(Boolean), qrAllowedHosts: c.QR_ALLOWED_HOSTS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean), qrFallbackEnabled: c.QR_FALLBACK_ENABLED.toLowerCase() === "true", aiVerificationEnabled: c.AI_VERIFICATION_ENABLED.toLowerCase() === "true", aiVerificationRequired: c.AI_VERIFICATION_REQUIRED.toLowerCase() === "true" };
 }
 export function validateConfig(c: Config): string[] {
   const p: string[] = [];
@@ -88,6 +98,8 @@ export function validateConfig(c: Config): string[] {
   else if (c.ENVIRONMENT === "staging" && c.EXTRACTOR === "simulator") p.push("EXTRACTOR=simulator is forbidden in staging");
   if (c.WHATSAPP_PROVIDER === "cloud-api" && (!c.META_ACCESS_TOKEN || !c.META_APP_SECRET || !c.META_VERIFY_TOKEN || !c.META_PHONE_NUMBER_ID)) p.push("cloud-api requires META_ACCESS_TOKEN, META_APP_SECRET, META_VERIFY_TOKEN, META_PHONE_NUMBER_ID");
   if (c.EXTRACTOR.startsWith("anthropic") && !c.ANTHROPIC_API_KEY) p.push("anthropic extractor requires ANTHROPIC_API_KEY");
+  if (c.aiVerificationRequired && !c.aiVerificationEnabled) p.push("AI_VERIFICATION_REQUIRED requires AI_VERIFICATION_ENABLED=true");
+  if (c.aiVerificationEnabled && !c.ANTHROPIC_API_KEY) p.push("AI_VERIFICATION_ENABLED requires ANTHROPIC_API_KEY");
   if (c.CRM_PROVIDER === "http-contract" && !c.CRM_BASE_URL) p.push("http-contract CRM requires CRM_BASE_URL");
   if (c.STORAGE_DRIVER === "s3" && (!c.S3_BUCKET || !c.S3_REGION)) p.push("s3 storage requires S3_BUCKET and S3_REGION");
   return p;

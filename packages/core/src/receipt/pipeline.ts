@@ -16,6 +16,8 @@ import type { QueueService } from "../ops/queue.ts";
 import type { CrmEmitter } from "../conversation/engine.ts";
 import { render, reasonText } from "../conversation/copy.ts";
 import { maskPhone } from "../util/phone.ts";
+import { enrichWithQrFallback } from "../extraction/qr.ts";
+import type { AiVerificationService } from "../verification/service.ts";
 
 const { submissions, participants, extractions, submissionItems, canonicalReceipts, duplicateCandidates, reviewTasks, entries, entryEvents, mediaAssets, drawCandidates, draws } = schema;
 export type Submission = typeof submissions.$inferSelect;
@@ -44,7 +46,7 @@ export interface AlertSink { raise(a: { kind: string; severity: "info" | "warnin
  * is retried; it never becomes a rejection.
  */
 export class ReceiptPipeline {
-  constructor(private db: Db, private deps: { media: MediaService; extractor: Extractor; campaigns: CampaignService; participants: ParticipantService; audit: AuditService; outbox: OutboxService; queue: QueueService; crm?: CrmEmitter | null; alerts: AlertSink; reviewSlaHours: number }) {}
+  constructor(private db: Db, private deps: { media: MediaService; extractor: Extractor; campaigns: CampaignService; participants: ParticipantService; audit: AuditService; outbox: OutboxService; queue: QueueService; crm?: CrmEmitter | null; alerts: AlertSink; reviewSlaHours: number; qr?: { enabled: boolean; timeoutMs: number; maxBytes: number; maxRedirects: number; allowedHosts: string[] }; verifier?: AiVerificationService }) {}
 
   async get(id: string) { const [s] = await this.db.select().from(submissions).where(eq(submissions.id, id)); return s ?? null; }
   async statusOf(id: string) { const [s] = await this.db.select({ status: submissions.status }).from(submissions).where(eq(submissions.id, id)); return s?.status ?? null; }
@@ -80,7 +82,10 @@ export class ReceiptPipeline {
     const [{ n: attemptNo }] = await this.db.select({ n: sql<number>`count(*)::int + 1` }).from(extractions).where(eq(extractions.submissionId, submissionId));
 
     let facts: Facts;
-    try { facts = await extractor.extract({ original, normalised, mime: asset.mime, context }); }
+    try {
+      facts = await extractor.extract({ original, normalised, mime: asset.mime, context });
+      facts = (await enrichWithQrFallback({ facts, original, context, enabled: this.deps.qr?.enabled ?? true, fetch: { timeoutMs: this.deps.qr?.timeoutMs ?? 8_000, maxBytes: this.deps.qr?.maxBytes ?? 1_000_000, maxRedirects: this.deps.qr?.maxRedirects ?? 3, allowedHosts: this.deps.qr?.allowedHosts ?? [] } })).facts;
+    }
     catch (e) {
       const ex = e as ExtractorUnavailable;
       await this.deps.alerts.raise({ kind: "extraction.failure", severity: "critical", message: `extractor failure: ${ex.message}`, runbook: "docs/runbooks/media-and-extraction.md" });
@@ -94,13 +99,18 @@ export class ReceiptPipeline {
     const [{ n: periodCount }] = await this.db.select({ n: sql<number>`count(*)::int` }).from(entries).where(and(eq(entries.participantId, s.participantId), eq(entries.campaignId, s.campaignId), eq(entries.periodCode, s.periodCode ?? ""), eq(entries.status, "active")));
     const [{ n: campaignCount }] = await this.db.select({ n: sql<number>`count(*)::int` }).from(entries).where(and(eq(entries.participantId, s.participantId), eq(entries.campaignId, s.campaignId), eq(entries.status, "active")));
     const evaluation = evaluate(facts, rules, { intakeAt: s.intakeAt, campaignOpen: !!s.periodCode && campaign.status === "active", windowStart: rules.purchaseWindow?.start ?? campaign.startsAt, windowEnd: rules.purchaseWindow?.end ?? campaign.endsAt, selectedOutletId: s.selectedOutletId, selectedOutletParticipating: !!(selectedOutlet && member), enrolled: !!enrollment && !enrollment.withdrawnAt, participantActive: participant?.status === "active", periodEntryCount: periodCount, campaignEntryCount: campaignCount, imageQuality: (asset.quality ?? {}) as Record<string, boolean> });
-    let disposition: Disposition | "duplicate" = evaluation.disposition; let reason = evaluation.reason;
-    if (controls.pauseAutoQualify && disposition === "qualified") { disposition = "review"; reason = "auto_qualification_paused"; }
-
-    // duplicate evidence: exact bytes, visual candidates (search signal only), canonical purchase identity
+    // Duplicate evidence is computed before AI so the verifier receives the same signals that the final ledger decision uses.
     const key = receiptKey(s.selectedOutletId, facts.transaction.date, facts.transaction.receiptNo);
     const exact = await this.db.select({ id: submissions.id, status: submissions.status }).from(submissions).innerJoin(mediaAssets, eq(mediaAssets.id, submissions.mediaAssetId)).where(and(eq(mediaAssets.sha256, asset.sha256), eq(submissions.campaignId, s.campaignId), ne(submissions.id, submissionId))).limit(5);
     const visual = await this.visualCandidates(asset, s);
+    let disposition: Disposition | "duplicate" = evaluation.disposition; let reason = evaluation.reason;
+    const verification = this.deps.verifier ? await this.deps.verifier.verify({ original, mime: asset.mime, facts, evaluation, rules, duplicateSignals: { exact: exact.length, visual: visual.length } }) : null;
+    if (verification) {
+      facts = { ...facts, verification, raw: { ...(facts.raw ?? {}), verification } };
+      const mustHold = verification.decision === "hold" && (verification.status === "complete" || this.deps.verifier?.required);
+      if (mustHold && disposition === "qualified") { disposition = "review"; reason = "ai_verification_hold"; }
+    }
+    if (controls.pauseAutoQualify && disposition === "qualified") { disposition = "review"; reason = "auto_qualification_paused"; }
 
     const out = await this.db.transaction(async (tx) => {
       for (const c of exact) await tx.insert(duplicateCandidates).values({ id: newId("dup"), submissionId, candidateSubmissionId: c.id, kind: "exact_bytes", score: 1 }).onConflictDoNothing();
@@ -158,7 +168,7 @@ export class ReceiptPipeline {
   private async commit(tx: DbOrTx, a: { s: Submission; version: string; facts: Facts | null; evaluation: Evaluation | null; disposition: Disposition | "duplicate"; reason: string; canonicalId: string | null; attemptNo: number; decidedBy: string; note?: string | null; units: number }) {
     const { s, facts, evaluation, disposition, reason, canonicalId } = a; const isReview = a.decidedBy !== "system"; const now = new Date().toISOString();
     if (facts) {
-      await tx.insert(extractions).values({ id: newId("ext"), submissionId: s.id, attemptNo: a.attemptNo, provider: facts.provider, model: facts.model, promptVersion: facts.promptVersion, schemaVersion: facts.schema, ocrText: facts.ocrText.slice(0, 20_000), facts: { document: facts.document, merchant: facts.merchant, transaction: facts.transaction, quality: facts.quality }, ruleResults: evaluation?.rules ?? [], disposition, confidence: facts.quality.confidence, latencyMs: facts.latencyMs, raw: facts.raw });
+      await tx.insert(extractions).values({ id: newId("ext"), submissionId: s.id, attemptNo: a.attemptNo, provider: facts.provider, model: facts.model, promptVersion: facts.promptVersion, schemaVersion: facts.schema, ocrText: facts.ocrText.slice(0, 20_000), facts: { document: facts.document, merchant: facts.merchant, transaction: facts.transaction, quality: facts.quality, evidence: facts.evidence, verification: facts.verification }, ruleResults: evaluation?.rules ?? [], disposition, confidence: facts.quality.confidence, latencyMs: facts.latencyMs, raw: facts.raw });
       await tx.delete(submissionItems).where(eq(submissionItems.submissionId, s.id));
       if (facts.lines.length) await tx.insert(submissionItems).values(facts.lines.map((l) => ({ id: newId("itm"), submissionId: s.id, lineNo: l.n, rawText: l.raw.slice(0, 200), description: l.description.slice(0, 160), quantity: l.quantity, packGrams: l.packGrams, amountMinor: l.amountMinor, voided: l.voided, productCode: l.product?.code ?? null, evidence: { unitMinor: l.unitMinor, basis: l.product?.basis ?? null } })));
     }

@@ -21,6 +21,7 @@ import { ReportService } from "./ops/reports.ts";
 import { Worker } from "./ops/worker.ts";
 import { CloudApiTransport } from "./whatsapp/cloud-api.ts";
 import { SimulatorTransport } from "./whatsapp/simulator.ts";
+import { AiVerificationService } from "./verification/service.ts";
 import type { WhatsAppTransport } from "./whatsapp/transport.ts";
 import path from "node:path";
 
@@ -44,10 +45,11 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   const storage = opts.storage ?? (cfg.STORAGE_DRIVER === "fs" ? new FsStorage(path.resolve(cfg.MEDIA_ROOT)) : new S3Storage(cfg.S3_BUCKET, cfg.S3_PREFIX, { endpoint: cfg.S3_ENDPOINT, region: cfg.S3_REGION, accessKeyId: cfg.S3_ACCESS_KEY_ID, secretAccessKey: cfg.S3_SECRET_ACCESS_KEY }));
   const media = new MediaService(db, storage, cfg.RETENTION_MEDIA_DAYS);
   const extractor = opts.extractor ?? createExtractor(cfg);
+  const verifier = new AiVerificationService({ enabled: cfg.aiVerificationEnabled, required: cfg.aiVerificationRequired, apiKey: cfg.ANTHROPIC_API_KEY, model: cfg.AI_VERIFICATION_MODEL, baseURL: cfg.ANTHROPIC_BASE_URL, timeoutMs: cfg.AI_VERIFICATION_TIMEOUT_MS, minProbability: cfg.AI_VERIFICATION_MIN_PROBABILITY, maxRisk: "low" });
   const signals = new OpsSignals(db); const queue = new QueueService(db); const outbox = new OutboxService(db);
   const crmAdapter = opts.crmAdapter ?? (cfg.CRM_PROVIDER === "http-contract" ? new HttpContractAdapter(cfg.CRM_BASE_URL, cfg.CRM_TOKEN, cfg.CRM_TIMEOUT_MS) : new NoCrmAdapter());
   const crm = new CrmService(db, crmAdapter, environment, signals); participants.crm = crm;
-  const pipeline = new ReceiptPipeline(db, { media, extractor, campaigns, participants, audit, outbox, queue, crm, alerts: signals, reviewSlaHours: cfg.REVIEW_SLA_HOURS });
+  const pipeline = new ReceiptPipeline(db, { media, extractor, verifier, campaigns, participants, audit, outbox, queue, crm, alerts: signals, reviewSlaHours: cfg.REVIEW_SLA_HOURS, qr: { enabled: cfg.qrFallbackEnabled, timeoutMs: cfg.QR_FETCH_TIMEOUT_MS, maxBytes: cfg.QR_FETCH_MAX_BYTES, maxRedirects: cfg.QR_FETCH_MAX_REDIRECTS, allowedHosts: cfg.qrAllowedHosts } });
   const winners = new WinnerService(db, { campaigns, participants, audit, outbox, crm, claimDays: cfg.CLAIM_WINDOW_DAYS });
   const draws = new DrawService(db, { campaigns, audit });
   const conversation = new ConversationEngine(db, { campaigns, participants, intake: pipeline, winners, crm, audit });
@@ -55,6 +57,6 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   if (environment === "production" && transport.mode !== "configured") throw new Error("a simulated transport is forbidden in production");
   const reports = new ReportService(db);
   const worker = new Worker({ db, cfg, environment, queue, outbox, crm, transport, conversation, pipeline, winners, media, campaigns, signals, audit, log });
-  return { cfg, environment, log, pool, db, audit, auth, campaigns, participants, media, storage, extractor, signals, queue, outbox, crm, pipeline, winners, draws, conversation, transport, reports, worker,
+  return { cfg, environment, log, pool, db, audit, auth, campaigns, participants, media, storage, extractor, verifier, signals, queue, outbox, crm, pipeline, winners, draws, conversation, transport, reports, worker,
     async close() { worker.stop(); await extractor.close?.(); await pool.end(); } };
 }

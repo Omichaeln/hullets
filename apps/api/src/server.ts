@@ -51,7 +51,7 @@ export function createHttpServer(app: App) {
   });
 
   ex.get("/health/live", (_req, res) => res.json({ ok: true }));
-  ex.get("/health/ready", async (_req, res) => { try { await app.db.execute("select 1"); const x = await app.extractor.health(); const st = await app.storage.health(); const ok = x.ok && st.ok; res.status(ok ? 200 : 503).json({ ok, database: true, extractor: x, storage: st, transport: app.transport.health(), worker: app.worker.health() }); } catch (e) { res.status(503).json({ ok: false, error: (e as Error).message }); } });
+  ex.get("/health/ready", async (_req, res) => { try { await app.db.execute("select 1"); const x = await app.extractor.health(); const st = await app.storage.health(); const verifier = await app.verifier.health(); const ok = x.ok && st.ok && (!app.cfg.aiVerificationRequired || verifier.ok); res.status(ok ? 200 : 503).json({ ok, database: true, extractor: x, verifier, storage: st, transport: app.transport.health(), worker: app.worker.health() }); } catch (e) { res.status(503).json({ ok: false, error: (e as Error).message }); } });
   ex.get("/api/contract.json", (_req, res) => res.json(contractDocument()));
 
   // ---- authenticated receipt media (bearer header only; never a capability URL)

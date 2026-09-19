@@ -53,8 +53,8 @@ export function evaluate(facts: Facts, rules: Rules, ctx: Context): Evaluation {
   const capP = rules.caps.perParticipantPerPeriod, capC = rules.caps.perParticipantCampaign;
   if (capP != null && ctx.periodEntryCount >= capP) add("entry_cap", "fail", "entry_cap_reached", { count: ctx.periodEntryCount, cap: capP }); else if (capC != null && ctx.campaignEntryCount >= capC) add("entry_cap", "fail", "entry_cap_reached", { count: ctx.campaignEntryCount, cap: capC }); else add("entry_cap", "pass", null, { unlimited: capP == null && capC == null });
   // 8. OCR confidence and cross-check warnings are information: low -> review, never fail
-  const conf = facts.quality.confidence;
-  if (conf != null && conf < rules.review.minOcrConfidence) add("ocr_confidence", "unknown", "image_unreadable", { confidence: conf }); else add("ocr_confidence", "pass", null, { confidence: conf });
+  const conf = facts.quality.confidence; const qrBacked = facts.evidence?.qr?.status === "parsed";
+  if (conf != null && conf < rules.review.minOcrConfidence && !qrBacked) add("ocr_confidence", "unknown", "image_unreadable", { confidence: conf }); else add("ocr_confidence", "pass", null, { confidence: conf, qrBacked });
   const disagree = facts.quality.warnings.filter((w) => /disagreement/.test(w));
   if (disagree.length) add("extraction_consistency", "unknown", "receipt_number_unreadable", { warnings: disagree }); else add("extraction_consistency", "pass", null);
 
