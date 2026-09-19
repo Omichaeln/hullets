@@ -15,8 +15,9 @@ import type { OutboxService } from "../ops/outbox.ts";
 import type { QueueService } from "../ops/queue.ts";
 import type { CrmEmitter } from "../conversation/engine.ts";
 import { render, reasonText } from "../conversation/copy.ts";
+import { maskPhone } from "../util/phone.ts";
 
-const { submissions, extractions, submissionItems, canonicalReceipts, duplicateCandidates, reviewTasks, entries, entryEvents, mediaAssets, drawCandidates, draws } = schema;
+const { submissions, participants, extractions, submissionItems, canonicalReceipts, duplicateCandidates, reviewTasks, entries, entryEvents, mediaAssets, drawCandidates, draws } = schema;
 export type Submission = typeof submissions.$inferSelect;
 const TERMINAL = new Set(["qualified", "not_qualified", "duplicate", "review", "reupload"]);
 const PROBABLE_VISUAL_DISTANCE = 6;
@@ -282,8 +283,8 @@ export class ReceiptPipeline {
     });
   }
   async reviewQueue() {
-    const open = await this.db.select({ t: reviewTasks, s: submissions }).from(reviewTasks).innerJoin(submissions, eq(submissions.id, reviewTasks.submissionId)).where(ne(reviewTasks.state, "decided")).orderBy(asc(reviewTasks.createdAt));
+    const open = await this.db.select({ t: reviewTasks, s: submissions, participantPhone: participants.channelUid }).from(reviewTasks).innerJoin(submissions, eq(submissions.id, reviewTasks.submissionId)).innerJoin(participants, eq(participants.id, submissions.participantId)).where(ne(reviewTasks.state, "decided")).orderBy(asc(reviewTasks.createdAt));
     const byReason: Record<string, number> = {}; for (const r of open) byReason[r.t.reasonCode ?? "unknown"] = (byReason[r.t.reasonCode ?? "unknown"] || 0) + 1;
-    return { count: open.length, oldest: open[0]?.t.createdAt ?? null, overdue: open.filter((r) => Date.parse(r.t.slaDueAt) < Date.now()).length, byReason, items: open.map((r) => ({ submissionId: r.s.id, reference: r.s.reference, reason: r.t.reasonCode, state: r.t.state, assignee: r.t.assignee, slaDueAt: r.t.slaDueAt, ageMinutes: Math.round((Date.now() - Date.parse(r.t.createdAt)) / 60000), period: r.s.periodCode, campaignId: r.s.campaignId })) };
+    return { count: open.length, oldest: open[0]?.t.createdAt ?? null, overdue: open.filter((r) => Date.parse(r.t.slaDueAt) < Date.now()).length, byReason, items: open.map((r) => ({ submissionId: r.s.id, reference: r.s.reference, participantPhone: maskPhone(r.participantPhone), reason: r.t.reasonCode, state: r.t.state, assignee: r.t.assignee, slaDueAt: r.t.slaDueAt, ageMinutes: Math.round((Date.now() - Date.parse(r.t.createdAt)) / 60000), period: r.s.periodCode, campaignId: r.s.campaignId })) };
   }
 }

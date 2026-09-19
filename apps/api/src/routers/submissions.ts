@@ -2,13 +2,16 @@ import { z } from "zod";
 import { eq, and, desc, ne, sql, or, ilike, gte } from "drizzle-orm";
 import { schema } from "@promo/db";
 import { router, guard } from "../trpc.ts";
-import { notFound, can } from "@promo/core";
-const { submissions, extractions, submissionItems, duplicateCandidates, reviewTasks, entries, canonicalReceipts, outlets, mediaAssets } = schema;
+import { notFound, can, maskPhone } from "@promo/core";
+const { submissions, participants, extractions, submissionItems, duplicateCandidates, reviewTasks, entries, canonicalReceipts, outlets, mediaAssets } = schema;
 export const submissionsRouter = router({
-  list: guard("submission.read").input(z.object({ campaignId: z.string().optional(), status: z.string().optional(), period: z.string().optional(), reference: z.string().optional(), participantId: z.string().optional(), since: z.string().optional(), limit: z.number().int().min(1).max(200).default(50), offset: z.number().int().min(0).default(0) })).query(async ({ ctx, input }) => {
-    const conds = [input.campaignId ? eq(submissions.campaignId, input.campaignId) : undefined, input.status ? eq(submissions.status, input.status) : undefined, input.period ? eq(submissions.periodCode, input.period) : undefined, input.participantId ? eq(submissions.participantId, input.participantId) : undefined, input.reference ? ilike(submissions.reference, `%${input.reference.replace(/[%_]/g, "")}%`) : undefined, input.since ? gte(submissions.createdAt, input.since) : undefined].filter(Boolean);
-    const rows = await ctx.app.db.select({ s: submissions, review: { state: reviewTasks.state, assignee: reviewTasks.assignee, slaDueAt: reviewTasks.slaDueAt } }).from(submissions).leftJoin(reviewTasks, eq(reviewTasks.submissionId, submissions.id)).where(conds.length ? and(...(conds as never[])) : undefined).orderBy(desc(submissions.createdAt)).limit(input.limit).offset(input.offset);
-    return { rows: rows.map((r) => ({ ...r.s, review: r.review?.state ? r.review : null })), next: rows.length === input.limit ? input.offset + input.limit : null };
+  list: guard("submission.read").input(z.object({ campaignId: z.string().optional(), status: z.string().optional(), period: z.string().optional(), reference: z.string().optional(), participantId: z.string().optional(), phone: z.string().max(30).optional(), since: z.string().optional(), limit: z.number().int().min(1).max(200).default(50), offset: z.number().int().min(0).default(0) })).query(async ({ ctx, input }) => {
+    const phoneDigits = input.phone?.replace(/\D/g, "") ?? "";
+    const normalizedPhone = phoneDigits ? ctx.app.participants.uid(input.phone ?? "") : null;
+    const phoneCond = phoneDigits ? (normalizedPhone ? or(eq(participants.channelUid, normalizedPhone), ilike(participants.channelUid, `%${phoneDigits}%`)) : ilike(participants.channelUid, `%${phoneDigits}%`)) : undefined;
+    const conds = [input.campaignId ? eq(submissions.campaignId, input.campaignId) : undefined, input.status ? eq(submissions.status, input.status) : undefined, input.period ? eq(submissions.periodCode, input.period) : undefined, input.participantId ? eq(submissions.participantId, input.participantId) : undefined, phoneCond, input.reference ? ilike(submissions.reference, `%${input.reference.replace(/[%_]/g, "")}%`) : undefined, input.since ? gte(submissions.createdAt, input.since) : undefined].filter(Boolean);
+    const rows = await ctx.app.db.select({ s: submissions, participantPhone: participants.channelUid, review: { state: reviewTasks.state, assignee: reviewTasks.assignee, slaDueAt: reviewTasks.slaDueAt } }).from(submissions).innerJoin(participants, eq(participants.id, submissions.participantId)).leftJoin(reviewTasks, eq(reviewTasks.submissionId, submissions.id)).where(conds.length ? and(...(conds as never[])) : undefined).orderBy(desc(submissions.createdAt)).limit(input.limit).offset(input.offset);
+    return { rows: rows.map((r) => ({ ...r.s, participantPhone: maskPhone(r.participantPhone), review: r.review?.state ? r.review : null })), next: rows.length === input.limit ? input.offset + input.limit : null };
   }),
   queue: guard("submission.read").query(({ ctx }) => ctx.app.pipeline.reviewQueue()),
   get: guard("submission.read").input(z.object({ submissionId: z.string() })).query(async ({ ctx, input }) => {
@@ -46,10 +49,13 @@ export const submissionsRouter = router({
   _unusedOutlets: guard("submission.read").query(({ ctx }) => ctx.app.db.select({ id: outlets.id }).from(outlets).where(ne(outlets.active, true)).limit(1)),
 });
 export const entriesRouter = router({
-  list: guard("entry.read").input(z.object({ campaignId: z.string().optional(), period: z.string().optional(), status: z.string().optional(), participantId: z.string().optional(), limit: z.number().int().min(1).max(200).default(50), offset: z.number().int().min(0).default(0) })).query(async ({ ctx, input }) => {
-    const conds = [input.campaignId ? eq(entries.campaignId, input.campaignId) : undefined, input.period ? eq(entries.periodCode, input.period) : undefined, input.status ? eq(entries.status, input.status) : undefined, input.participantId ? eq(entries.participantId, input.participantId) : undefined].filter(Boolean);
-    const rows = await ctx.app.db.select({ e: entries, reference: submissions.reference }).from(entries).innerJoin(submissions, eq(submissions.id, entries.submissionId)).where(conds.length ? and(...(conds as never[])) : undefined).orderBy(desc(entries.awardedAt)).limit(input.limit).offset(input.offset);
-    return { rows: rows.map((r) => ({ ...r.e, reference: r.reference })), next: rows.length === input.limit ? input.offset + input.limit : null };
+  list: guard("entry.read").input(z.object({ campaignId: z.string().optional(), period: z.string().optional(), status: z.string().optional(), participantId: z.string().optional(), phone: z.string().max(30).optional(), limit: z.number().int().min(1).max(200).default(50), offset: z.number().int().min(0).default(0) })).query(async ({ ctx, input }) => {
+    const phoneDigits = input.phone?.replace(/\D/g, "") ?? "";
+    const normalizedPhone = phoneDigits ? ctx.app.participants.uid(input.phone ?? "") : null;
+    const phoneCond = phoneDigits ? (normalizedPhone ? or(eq(participants.channelUid, normalizedPhone), ilike(participants.channelUid, `%${phoneDigits}%`)) : ilike(participants.channelUid, `%${phoneDigits}%`)) : undefined;
+    const conds = [input.campaignId ? eq(entries.campaignId, input.campaignId) : undefined, input.period ? eq(entries.periodCode, input.period) : undefined, input.status ? eq(entries.status, input.status) : undefined, input.participantId ? eq(entries.participantId, input.participantId) : undefined, phoneCond].filter(Boolean);
+    const rows = await ctx.app.db.select({ e: entries, reference: submissions.reference, participantPhone: participants.channelUid }).from(entries).innerJoin(submissions, eq(submissions.id, entries.submissionId)).innerJoin(participants, eq(participants.id, entries.participantId)).where(conds.length ? and(...(conds as never[])) : undefined).orderBy(desc(entries.awardedAt)).limit(input.limit).offset(input.offset);
+    return { rows: rows.map((r) => ({ ...r.e, reference: r.reference, participantPhone: maskPhone(r.participantPhone) })), next: rows.length === input.limit ? input.offset + input.limit : null };
   }),
   get: guard("entry.read").input(z.object({ entryId: z.string() })).query(async ({ ctx, input }) => {
     const [e] = await ctx.app.db.select().from(entries).where(eq(entries.id, input.entryId)); if (!e) throw notFound("entry");
