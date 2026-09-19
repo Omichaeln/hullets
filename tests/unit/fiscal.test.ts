@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { decodeReceiptCodes } from "@promo/core/extraction/qr.ts";
 import { parseFiscalQr, unpackTail, fiscalIdentity, DEFAULT_QR_LAYOUT } from "@promo/core/fiscal/zimra-qr.ts";
-import { mapFiscalRecord, readValidated, HttpFdmsAdapter, NoFdmsAdapter } from "@promo/core/fiscal/fdms.ts";
+import { mapFiscalRecord, readValidated, readHtmlVerdict, readHtmlFields, reviewInvoiceUrl, HttpFdmsAdapter, NoFdmsAdapter } from "@promo/core/fiscal/fdms.ts";
 import { validateOutboundUrl, SafeFetchRefused } from "@promo/core/util/safe-fetch.ts";
 import { FIXTURE_VALUE } from "../../tools/gen-qr-fixture.ts";
 
@@ -78,6 +78,101 @@ describe("FDMS response mapping", () => {
     expect(rec.merchantName).toBe("Mopani Mart");
     expect(rec.lines[0].amountMinor).toBe(620);
     expect(rec.lines[0].quantity).toBe(2);
+  });
+});
+
+// The real FDMS endpoint is a verification PAGE, not an API: the invoice detail
+// sits behind a "Review Invoice" form carrying hidden fields. These cover the
+// three things that page has to be read for without ever deciding WHERE to go —
+// the host is configured, and these functions only read what came back.
+describe("FDMS HTML verification page", () => {
+  const page = (body: string) => `<html><body>${body}</body></html>`;
+
+  it("follows the Review Invoice form, carrying its hidden fields, against the same base", () => {
+    const url = reviewInvoiceUrl(page(`
+      <form method="post" action="/Invoice/Details">
+        <input type="hidden" name="deviceID" value="0000012345" />
+        <input type="hidden" name="receiptGlobalNo" value="0000000077" />
+        <input type="hidden" name="token" value="a&amp;b" />
+        <button type="submit">Review Invoice</button>
+      </form>`), new URL("https://fdms.example.test/verify?x=1"));
+    expect(url).not.toBeNull();
+    expect(url!.origin).toBe("https://fdms.example.test");
+    expect(url!.pathname).toBe("/Invoice/Details");
+    expect(url!.searchParams.get("deviceID")).toBe("0000012345");
+    expect(url!.searchParams.get("token")).toBe("a&b");
+  });
+
+  it("ignores forms that are not the Review Invoice form", () => {
+    expect(reviewInvoiceUrl(page('<form action="/search"><input name="q" value="1"><button>Search</button></form>'), new URL("https://fdms.example.test/"))).toBeNull();
+    expect(reviewInvoiceUrl(page("<p>Review Invoice</p>"), new URL("https://fdms.example.test/"))).toBeNull();
+  });
+
+  it("requires an explicit affirmative verdict, and reads a negative as negative", () => {
+    expect(readHtmlVerdict(page("<h2>This invoice is valid</h2>"))).toBe(true);
+    expect(readHtmlVerdict(page("<h2>This invoice is not valid</h2>"))).toBe(false);
+    expect(readHtmlVerdict(page("<h2>This invoice is invalid</h2>"))).toBe(false);
+    // Silence, an error page, or a redesign must never read as confirmation.
+    expect(readHtmlVerdict(page("<p>Service temporarily unavailable</p>"))).toBe(false);
+    expect(readHtmlVerdict(page("<p>Enter your verification code</p>"))).toBe(false);
+    expect(readHtmlVerdict("")).toBe(false);
+  });
+
+  it("reads labelled values from table rows and from Label: value lines", () => {
+    const fields = readHtmlFields(page(`
+      <table>
+        <tr><th>Seller Name:</th><td>Mopani Mart</td></tr>
+        <tr><td>Invoice Total</td><td>USD&nbsp;14.98</td></tr>
+      </table>
+      <div>Invoice Date: 19/09/2026</div>`));
+    expect(fields["Seller Name"]).toBe("Mopani Mart");
+    expect(fields["Invoice Total"]).toBe("USD 14.98");
+    expect(fields["Invoice Date"]).toBe("19/09/2026");
+  });
+
+  it("maps a fetched verification page onto the contract", async () => {
+    const pages: Record<string, string> = {
+      "https://fdms.example.test/verify?deviceID=0000012345&fiscalDayNo=18&receiptGlobalNo=0000000077&qrCode=1A2B3C4D5E6F7A8B":
+        page('<form action="/Details"><input name="id" value="77"><button>Review Invoice</button></form>'),
+      "https://fdms.example.test/Details?id=77": page(`
+        <h2>This invoice is valid</h2>
+        <table>
+          <tr><td>Seller Name</td><td>Mopani Mart</td></tr>
+          <tr><td>Branch Name</td><td>Westgate</td></tr>
+          <tr><td>Invoice No</td><td>INV-4512</td></tr>
+          <tr><td>Invoice Date</td><td>19/09/2026</td></tr>
+          <tr><td>Currency</td><td>USD</td></tr>
+          <tr><td>Invoice Total</td><td>14.98</td></tr>
+        </table>`),
+    };
+    const adapter = new HttpFdmsAdapter({
+      baseUrl: "https://fdms.example.test/verify", apiKey: "", allowedHosts: ["fdms.example.test"],
+      timeoutMs: 1000, maxBytes: 100_000, maxRedirects: 0, contractMode: "html",
+      fetchImpl: async (url: string) => {
+        const body = pages[url];
+        if (body == null) throw new Error(`unexpected fetch: ${url}`);
+        return { url: new URL(url), status: 200, contentType: "text/html", body: Buffer.from(body) };
+      },
+    });
+    expect(adapter.mode).toBe("configured");
+    const rec = await adapter.lookup(ref() as never);
+    expect(rec.validated).toBe(true);
+    expect(rec.merchantName).toBe("Mopani Mart");
+    expect(rec.branchName).toBe("Westgate");
+    expect(rec.invoiceNo).toBe("INV-4512");
+    expect(rec.txnDate).toBe("2026-09-19");
+    expect(rec.totalMinor).toBe(1498);
+    // Identifiers we sent are echoed back, never invented by the page.
+    expect(rec.deviceId).toBe("0000012345");
+  });
+
+  it("refuses an HTML body when the contract is configured as json", async () => {
+    const adapter = new HttpFdmsAdapter({
+      baseUrl: "https://fdms.example.test/verify", apiKey: "", allowedHosts: ["fdms.example.test"],
+      timeoutMs: 1000, maxBytes: 100_000, maxRedirects: 0, contractMode: "json",
+      fetchImpl: async (url: string) => ({ url: new URL(url), status: 200, contentType: "text/html", body: Buffer.from("<p>This invoice is valid</p>") }),
+    });
+    await expect(adapter.lookup(ref() as never)).rejects.toBeInstanceOf(SafeFetchRefused);
   });
 });
 

@@ -94,16 +94,83 @@ function truncate(o: Record<string, unknown>): Record<string, unknown> | null {
 }
 
 /**
+ * The FDMS verification page is an HTML form, not an API.
+ *
+ * Navigating to a fiscal QR's destination lands on a page carrying a "Review
+ * Invoice" form; the invoice detail only appears once that form is submitted
+ * with its hidden fields. Reproduced here so the adapter can follow it.
+ *
+ * Only ever applied to a response already fetched from the configured,
+ * allowlisted host — this parses a page, it does not decide where to go.
+ */
+export function reviewInvoiceUrl(html: string, base: URL): URL | null {
+  for (const match of html.matchAll(/<form\b[^>]*>[\s\S]*?<\/form>/gi)) {
+    const form = match[0];
+    if (!/review\s+invoice/i.test(form)) continue;
+    const action = form.match(/\baction\s*=\s*["']([^"']+)["']/i);
+    if (!action) continue;
+    let url: URL;
+    try { url = new URL(decodeEntities(action[1]), base); } catch { continue; }
+    for (const input of form.matchAll(/<input\b[^>]*>/gi)) {
+      const name = input[0].match(/\bname\s*=\s*["']([^"']+)["']/i)?.[1];
+      const value = input[0].match(/\bvalue\s*=\s*["']([^"']*)["']/i)?.[1];
+      if (name && value != null) url.searchParams.set(decodeEntities(name), decodeEntities(value));
+    }
+    return url;
+  }
+  return null;
+}
+
+const decodeEntities = (t: string) => t.replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)));
+const stripTags = (html: string) => decodeEntities(html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, "\n"));
+
+/**
+ * Read the authority's verdict off a verification page.
+ *
+ * Deliberately conservative: an explicit affirmative phrase is required. An
+ * unrecognised page is NOT valid, because "we could not tell" and "the
+ * authority confirmed it" must never collapse into the same answer.
+ *
+ * A page is only ever consulted after it was fetched from the configured host,
+ * so this decides what the authority SAID — never whether to believe the host.
+ */
+export function readHtmlVerdict(html: string): boolean {
+  const text = stripTags(html);
+  if (/\b(?:invoice|receipt)\s+is\s+(?:not\s+valid|invalid)\b/i.test(text)) return false;
+  return /\b(?:invoice|receipt)\s+is\s+valid\b|\bvalid(?:ated|ation)\s+(?:invoice|receipt)\b|\bfiscal\s+(?:invoice|receipt)\s+(?:is\s+)?valid\b/i.test(text);
+}
+
+/** Pull labelled values out of a verification page: "Label: value" or a two-cell table row. */
+export function readHtmlFields(html: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const row of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells = [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((c) => stripTags(c[1]).trim().replace(/\s+/g, " "));
+    if (cells.length >= 2 && cells[0] && cells[1]) out[cells[0].replace(/:$/, "")] = cells[1];
+  }
+  for (const line of stripTags(html).split("\n")) {
+    const m = line.match(/^\s*([A-Za-z][A-Za-z /.()-]{2,40}?)\s*:\s*(.+?)\s*$/);
+    if (m && !out[m[1]]) out[m[1]] = m[2];
+  }
+  return out;
+}
+
+/**
  * HTTPS adapter against a configured FDMS validation endpoint.
  *
  * The host allowlist is mandatory. Without it the adapter reports
  * `not_configured` and the pipeline falls back to OCR, which is the right
  * failure: fetching whatever host a QR code names is how a printed code turns
  * into a promotion entry.
+ *
+ * Two response shapes are supported, because the real service is an HTML form
+ * rather than an API and a vendor gateway in front of it would not be:
+ * `html` follows the "Review Invoice" form and reads the invoice page,
+ * `json` maps a structured body. Both are driven by identifiers we parsed
+ * ourselves, sent to a host we configured.
  */
 export class HttpFdmsAdapter implements FdmsAdapter {
   readonly name = "zimra-fdms-http";
-  constructor(private o: { baseUrl: string; apiKey: string; allowedHosts: string[]; timeoutMs: number; maxBytes: number; maxRedirects: number; fetchImpl?: typeof safeFetch }) {}
+  constructor(private o: { baseUrl: string; apiKey: string; allowedHosts: string[]; timeoutMs: number; maxBytes: number; maxRedirects: number; contractMode?: "html" | "json"; fetchImpl?: typeof safeFetch }) {}
   get mode() { return this.o.baseUrl && this.o.allowedHosts.length ? ("configured" as const) : ("not_configured" as const); }
 
   private cfg(): SafeFetchConfig { return { timeoutMs: this.o.timeoutMs, maxBytes: this.o.maxBytes, maxRedirects: this.o.maxRedirects, allowedHosts: this.o.allowedHosts, requireAllowlist: true }; }
@@ -119,12 +186,46 @@ export class HttpFdmsAdapter implements FdmsAdapter {
 
   async lookup(ref: FiscalReference): Promise<FiscalRecord> {
     const fetcher = this.o.fetchImpl ?? safeFetch;
-    const res = await fetcher(this.url(ref), this.cfg(), this.o.apiKey ? { authorization: `Bearer ${this.o.apiKey}` } : {});
-    if (!res.contentType.includes("json")) throw new SafeFetchRefused("unsupported_content", `validation endpoint returned ${res.contentType || "an unlabelled body"}`);
-    let parsed: unknown;
-    try { parsed = JSON.parse(res.body.toString("utf8")); } catch { throw new SafeFetchRefused("unsupported_content", "validation response is not JSON"); }
-    if (!parsed || typeof parsed !== "object") throw new SafeFetchRefused("unsupported_content", "validation response is not an object");
-    return mapFiscalRecord(parsed as Record<string, unknown>, ref);
+    const headers: Record<string, string> = this.o.apiKey ? { authorization: `Bearer ${this.o.apiKey}` } : {};
+    let res = await fetcher(this.url(ref), this.cfg(), headers);
+
+    if (res.contentType.includes("json")) {
+      let parsed: unknown;
+      try { parsed = JSON.parse(res.body.toString("utf8")); } catch { throw new SafeFetchRefused("unsupported_content", "validation response is not JSON"); }
+      if (!parsed || typeof parsed !== "object") throw new SafeFetchRefused("unsupported_content", "validation response is not an object");
+      return mapFiscalRecord(parsed as Record<string, unknown>, ref);
+    }
+
+    if ((this.o.contractMode ?? "html") === "html" && (res.contentType.includes("html") || res.contentType.startsWith("text/"))) {
+      // The verdict lives behind the page's "Review Invoice" form. Follow it
+      // once, against the same allowlisted host, then read the invoice page.
+      const review = reviewInvoiceUrl(res.body.toString("utf8"), res.url);
+      if (review) { try { res = await fetcher(review.toString(), this.cfg(), headers); } catch { /* the first page is all we get */ } }
+      const html = res.body.toString("utf8");
+      const fields = readHtmlFields(html);
+      const pick2 = (names: string[]) => { for (const [k, v] of Object.entries(fields)) if (names.some((n) => k.toLowerCase().replace(/[^a-z0-9]/g, "").includes(n))) return v; return null; };
+      return {
+        validated: readHtmlVerdict(html),
+        deviceId: toStr(pick2(["deviceid"])) ?? ref.deviceId,
+        fiscalDayNo: toInt(pick2(["fiscalday"])) ?? ref.fiscalDayNo,
+        receiptGlobalNo: toStr(pick2(["globalno", "receiptglobal"])) ?? ref.receiptGlobalNo,
+        verificationCode: toStr(pick2(["verificationcode", "qrcode", "devicesignature"])) ?? ref.verificationCode,
+        invoiceNo: toStr(pick2(["invoiceno", "invoicenumber", "receiptno"])),
+        merchantTin: toStr(pick2(["tin"])),
+        merchantName: toStr(pick2(["sellername", "suppliername", "taxpayername", "tradename"])),
+        branchName: toStr(pick2(["branchname", "storename"])),
+        branchCode: toStr(pick2(["branchcode"])),
+        txnAt: toStr(pick2(["invoicedate", "receiptdate", "date"])),
+        txnDate: toDate(pick2(["invoicedate", "receiptdate", "date"])),
+        currency: toStr(pick2(["currency"])),
+        totalMinor: toMinor(pick2(["invoicetotal", "totalamount", "grandtotal", "total"])),
+        taxMinor: toMinor(pick2(["taxamount", "totaltax", "vatamount"])),
+        lines: [],
+        raw: truncate({ fields, finalHost: res.url.hostname }),
+      };
+    }
+
+    throw new SafeFetchRefused("unsupported_content", `validation endpoint returned ${res.contentType || "an unlabelled body"}`);
   }
 
   async health() {

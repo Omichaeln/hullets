@@ -58,7 +58,7 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   // the HTTP adapter reports not_configured, and every receipt takes the OCR
   // path rather than the system fetching wherever a QR code points.
   const fdms: FdmsAdapter = opts.fdmsAdapter
-    ?? (cfg.FISCAL_PROVIDER === "zimra-fdms" ? new HttpFdmsAdapter({ baseUrl: cfg.FISCAL_BASE_URL, apiKey: cfg.FISCAL_API_KEY, allowedHosts: cfg.fiscalAllowedHosts, timeoutMs: cfg.FISCAL_TIMEOUT_MS, maxBytes: cfg.FISCAL_MAX_BYTES, maxRedirects: cfg.FISCAL_MAX_REDIRECTS })
+    ?? (cfg.FISCAL_PROVIDER === "zimra-fdms" ? new HttpFdmsAdapter({ baseUrl: cfg.FISCAL_BASE_URL, apiKey: cfg.FISCAL_API_KEY, allowedHosts: cfg.fiscalAllowedHosts, timeoutMs: cfg.FISCAL_TIMEOUT_MS, maxBytes: cfg.FISCAL_MAX_BYTES, maxRedirects: cfg.FISCAL_MAX_REDIRECTS, contractMode: cfg.FISCAL_CONTRACT_MODE })
       : cfg.FISCAL_PROVIDER === "simulator" ? new SimulatorFdmsAdapter()
       : new NoFdmsAdapter());
   const fiscal = new FiscalService(db, fdms, { enabled: cfg.fiscalEnabled, required: cfg.fiscalRequired, layout: cfg.fiscalQrLayout });
