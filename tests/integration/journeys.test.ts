@@ -10,7 +10,7 @@ describe("participant journeys", () => {
   let h: Harness; beforeAll(async () => { h = await buildApp({ extractor: "simulator" }); }); afterAll(async () => { await h.close(); });
   const entryCount = async () => (await h.db.select().from(schema.entries)).length;
   it("T-01: a greeting from a new phone returns the campaign menu", async () => { const r = await h.say(P1, "Hi"); expect(r.result?.state).toBe("HOME"); expect(r.replies[0]).toMatch(/1\. Register/); expect(r.replies[0]).toMatch(/7\. My entries/); });
-  it("a greeting during registration returns a welcome menu instead of an ID validation error", async () => { const p = "263771000003"; expect((await h.say(p, "1")).replies[0]).toMatch(/FIRST NAME/); expect((await h.say(p, "Tendai")).replies[0]).toMatch(/SURNAME/); const r = await h.say(p, "hi"); expect(r.result?.state).toBe("HOME"); expect(r.replies[0]).toMatch(/Welcome to/); expect(r.replies[1]).toMatch(/1\. Register/); expect(r.replies[0]).not.toMatch(/doesn't look like an ID/); });
+  it("a greeting during registration returns a welcome menu instead of an ID validation error", async () => { const p = "263771000003"; expect((await h.say(p, "1")).replies[0]).toMatch(/FIRST NAME/); expect((await h.say(p, "Tendai")).replies[0]).toMatch(/SURNAME/); const r = await h.say(p, "hi"); expect(r.result?.state).toBe("HOME"); expect(r.replies[0]).toMatch(/Welcome to/); expect(r.replies[0]).toMatch(/1\. Register/); expect(r.replies[0]).not.toMatch(/doesn't look like an ID/); });
   it("T-16: an unregistered participant can read mechanics, terms, prizes and winners", async () => { expect((await h.say(P1, "3")).replies[0]).toMatch(/2 x 2kg pack/i); expect((await h.say(P1, "4")).replies[0]).toMatch(/TEST-T1/); expect((await h.say(P1, "5")).replies[0]).toMatch(/voucher/i); expect((await h.say(P1, "6")).replies[0]).toMatch(/No winners have been published yet/); expect((await h.say(P1, "2")).replies[0]).toMatch(/register first/i); });
   it("T-02: registration captures five fields with confirmation, correction and terms; a returning phone is recognised", async () => {
     expect((await h.say(P1, "1")).replies[0]).toMatch(/FIRST NAME/); expect((await h.say(P1, "T")).replies[0]).toMatch(/at least 2/); expect((await h.say(P1, "Tendai")).replies[0]).toMatch(/SURNAME/); expect((await h.say(P1, "Ncube")).replies[0]).toMatch(/ID number/); expect((await h.say(P1, "12")).replies[0]).toMatch(/doesn't look like/); expect((await h.say(P1, "TEST1234X")).replies[0]).toMatch(/town or city/);
@@ -19,11 +19,11 @@ describe("participant journeys", () => {
     const done = await h.say(P1, "yes"); expect(done.replies[0]).toMatch(/registered, Tendai/);
     const p = (await h.app.participants.byUid(P1))!; expect(p.surname).toBe("Ncube-Moyo"); expect(p.identityEnc).toBeTruthy(); expect(p.identityEnc).not.toContain("TEST1234X"); expect(p.identityFp).toBeTruthy(); expect(p.identityMask).toMatch(/\*/);
     const e = (await h.app.participants.enrollment(p.id, h.campaign.id))!; expect(e.termsVersion).toBe("TEST-T1"); expect(e.privacyVersion).toBe("TEST-P1");
-    expect((await h.say(P1, "hello")).replies[0]).toMatch(/1\. Register/); expect((await h.say(P1, "1")).replies[0]).toMatch(/already registered as Tendai/); await h.say(P1, "menu");
+    const returning = await h.say(P1, "hello"); expect(returning.replies[0]).toMatch(/Hello Tendai, welcome back/); expect(returning.replies[0]).toMatch(/1\. Enter another receipt/); expect(returning.replies[0]).toMatch(/2\. Continue an unfinished entry/); expect(returning.replies[0]).toMatch(/3\. View my entries/); expect((await h.say(P1, "2")).replies[0]).toMatch(/no unfinished entry/i); expect((await h.say(P1, "8")).replies[0]).toMatch(/update them now/i); await h.say(P1, "menu");
     expect((await h.db.select().from(schema.participants).where(eq(schema.participants.channelUid, P1))).length).toBe(1);
   });
   it("T-03: outlet selection covers all 80 branches by shop, pages, search and Back, and always ends in a canonical id", async () => {
-    const r1 = await h.say(P1, "2"); expect(r1.result?.state).toBe("OUTLET"); expect(r1.replies[0]).toMatch(/1\. Baobab Stores/); expect(r1.replies[0]).toMatch(/8\. Savanna Grocer/);
+    const r1 = await h.say(P1, "1"); expect(r1.result?.state).toBe("OUTLET"); expect(r1.replies[0]).toMatch(/1\. Baobab Stores/); expect(r1.replies[0]).toMatch(/8\. Savanna Grocer/);
     const r2 = await h.say(P1, "1"); expect(r2.replies[0]).toMatch(/Baobab Stores: choose the BRANCH/); expect(r2.replies[0]).toMatch(/9\. More/);
     const r3 = await h.say(P1, "9"); expect(r3.replies[0]).toMatch(/2\. .*Victoria Falls/); expect((await h.say(P1, "back")).replies[0]).toMatch(/Choose the SHOP/i);
     await h.say(P1, "1"); const pick = await h.say(P1, "1"); expect(pick.result?.state).toBe("RECEIPT"); expect(pick.replies[0]).toMatch(/Outlet: Baobab Stores —/);
@@ -54,11 +54,11 @@ describe("participant journeys", () => {
     expect((await h.db.select().from(schema.canonicalReceipts).where(eq(schema.canonicalReceipts.receiptNo, "004512"))).length).toBe(1);
   });
   it("global navigation and unsupported input never qualify; support handoff suspends automation until released", async () => {
-    await h.say(P1, "2"); expect((await h.say(P1, "help")).replies[0]).toMatch(/BACK goes one step back/); expect((await h.say(P1, "cancel")).replies[0]).toMatch(/Cancelled/); expect((await h.say(P1, "0")).replies[0]).toMatch(/1\. Register/);
+    await h.say(P1, "1"); expect((await h.say(P1, "help")).replies[0]).toMatch(/continue an unfinished entry/i); expect((await h.say(P1, "cancel")).replies[0]).toMatch(/Cancelled/); expect((await h.say(P1, "0")).replies[0]).toMatch(/1\. Enter another receipt/);
     const before = await entryCount(); await h.selectOutlet(P1); await h.say(P1, "voice note"); expect(await entryCount()).toBe(before);
     const r = await h.say(P1, "support"); expect(r.replies[0]).toMatch(/team will pick this up/); expect((await h.say(P1, "2")).replies[0]).toMatch(/team is handling/);
     expect((await h.app.conversation.handoffQueue()).length).toBe(1);
-    await h.app.conversation.releaseHandoff(h.campaign.id, P1, "stf_test"); expect((await h.say(P1, "menu")).replies[0]).toMatch(/1\. Register/);
+    await h.app.conversation.releaseHandoff(h.campaign.id, P1, "stf_test"); expect((await h.say(P1, "menu")).replies[0]).toMatch(/1\. Enter another receipt/);
   });
   it("T-18: a new content version applies prospectively; enrollment keeps the accepted notice versions", async () => {
     const vid = await h.app.campaigns.createVersion(h.campaign.id, { fromActive: true, content: { termsVersion: "TEST-T2", messages: { menu: "New menu {campaign}\n1. Register\n2. Enter" } } }, "stf_test"); await h.app.campaigns.activateVersion(h.campaign.id, vid, "stf_test");

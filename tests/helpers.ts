@@ -42,7 +42,7 @@ export async function buildApp({ extractor = "simulator", seed = true, env = {} 
       return { ...r, replies, result: (ev?.result ?? null) as { state?: string; submissionId?: string | null } | null, eventStatus: ev?.status ?? null };
     },
     async register(phone: string, { first = "Tendai", last = "Ncube", identity = "TEST1234X", town = "Harare" } = {}) { await h.say(phone, "hi"); await h.say(phone, "1"); await h.say(phone, first); await h.say(phone, last); await h.say(phone, identity); await h.say(phone, town); await h.say(phone, "yes"); return h.say(phone, "yes"); },
-    async selectOutlet(phone: string, query = "mopani westgate harare") { await h.say(phone, "2"); await h.say(phone, query); const candidate = await h.say(phone, "1"); return candidate.result?.state === "OUTLET_CONFIRM" ? h.say(phone, "yes") : candidate; },
+    async selectOutlet(phone: string, query = "mopani westgate harare") { await h.say(phone, "1"); await h.say(phone, query); const candidate = await h.say(phone, "1"); return candidate.result?.state === "OUTLET_CONFIRM" ? h.say(phone, "yes") : candidate; },
     /** Submit an image and wait for the decision. */
     async submit(phone: string, image: Buffer, { outlet = "mopani westgate harare", providerMessageId = null as string | null } = {}) {
       await h.selectOutlet(phone, outlet); const r = await h.say(phone, "", { image, providerMessageId }); await app.worker.drain();

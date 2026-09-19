@@ -14,7 +14,7 @@ export type InboundKind = "text" | "image" | "unsupported";
 export type ConversationInput = { eventId: string; providerMessageId: string; uid: string; kind: InboundKind; text?: string; mediaBytes?: Buffer | null; mime?: string | null; correlationId?: string | null; eventAt?: string | null };
 export type ConversationResult = { replies: string[]; state: string; campaignId: string | null; participantId?: string | null; submissionId?: string | null };
 type Nav = { mode: "retailers" | "branches" | "search"; retailer?: string; page: number; options: Array<{ label: string; value: string; kind: "retailer" | "outlet" | "more" }>; query?: string };
-type Ctx = { reg?: Record<string, string | boolean | undefined>; nav?: Nav; outletId?: string; outletLabel?: string; lastSubmissionId?: string; winnerNav?: Array<{ label: string; value: string }> };
+type Ctx = { reg?: Record<string, string | boolean | undefined>; nav?: Nav; outletId?: string; outletLabel?: string; lastSubmissionId?: string; resumeState?: "OUTLET" | "OUTLET_CONFIRM" | "RECEIPT"; resumeOutletId?: string; resumeOutletLabel?: string; winnerNav?: Array<{ label: string; value: string }> };
 
 export interface SubmissionIntake { submit(input: { campaignId: string; campaignVersionId: string; participantId: string; conversationId: string; inboundEventId: string; providerMessageId: string; uid: string; imageBytes: Buffer; selectedOutletId: string; correlationId?: string | null; eventAt?: string | null; reuploadOf?: string | null }): Promise<{ submissionId: string; reference: string; replay: boolean }>; statusOf(submissionId: string): Promise<string | null>; }
 export interface WinnersReadModel { publishedPeriods(campaignId: string): Promise<Array<{ code: string; label: string }>>; listPublic(campaignId: string, period: string): Promise<Array<{ rank: number; name: string; location: string | null; prize: string }>>; }
@@ -41,7 +41,8 @@ export class ConversationEngine {
     const content = campaigns.contentOf(version), rules = campaigns.rulesOf(version), flags = campaigns.flagsOf(version);
     const M = content.messages;
     const session = await this.session(cid, uid);
-    const state = session?.state ?? "HOME"; const ctx = (session?.context ?? {}) as Ctx; const expectedVersion = session?.version ?? null;
+    const expired = Boolean(session?.expiresAt && Date.parse(session.expiresAt) < Date.now());
+    const state = expired ? "HOME" : (session?.state ?? "HOME"); const ctx = (expired ? { lastSubmissionId: (session?.context as Ctx | undefined)?.lastSubmissionId } : (session?.context ?? {})) as Ctx; const expectedVersion = session?.version ?? null;
     const participant = await participants.byUid(uid);
     const enrollment = participant ? await participants.enrollment(participant.id, cid) : null;
     const { intent, number, text } = parseIntent(input.text, input.kind);
@@ -57,9 +58,12 @@ export class ConversationEngine {
       const id = newId("cnv"); await this.db.insert(conversations).values({ id, campaignId: cid, channelUid: uid, ...values }); return id;
     };
     const reply = (st: string, msgs: string | string[], extra: Partial<ConversationResult> = {}): ConversationResult => ({ replies: ([] as string[]).concat(msgs), state: st, campaignId: cid, ...extra });
+    const returning = Boolean(participant && enrollment && !enrollment.withdrawnAt);
     const menu = () => render(M, "menu", { campaign: campaign.name, status_item: flags.participantStatus ? render(M, "menu_status_item") : "" });
-    const home = async (prefix?: string) => { await save("HOME", { lastSubmissionId: ctx.lastSubmissionId }); return reply("HOME", prefix ? [prefix, menu()] : [menu()]); };
-    const welcome = async () => { await save("HOME", { lastSubmissionId: ctx.lastSubmissionId }); return reply("HOME", [render(M, "greeting", { campaign: campaign.name }), menu()]); };
+    const returningMenu = () => render(M, "returning_menu", { campaign: campaign.name });
+    const checkpoint = (): Partial<Ctx> => ["OUTLET", "OUTLET_CONFIRM", "RECEIPT"].includes(state) ? { resumeState: state as Ctx["resumeState"], resumeOutletId: ctx.outletId, resumeOutletLabel: ctx.outletLabel } : { resumeState: ctx.resumeState, resumeOutletId: ctx.resumeOutletId, resumeOutletLabel: ctx.resumeOutletLabel };
+    const home = async (prefix?: string) => { await save("HOME", { lastSubmissionId: ctx.lastSubmissionId, ...checkpoint() }); const m = returning ? returningMenu() : menu(); return reply("HOME", prefix ? [prefix, m] : [m]); };
+    const welcome = async () => { await save("HOME", { lastSubmissionId: ctx.lastSubmissionId, ...checkpoint() }); return reply("HOME", returning ? render(M, "returning_greeting", { campaign: campaign.name, first_name: participant!.firstName }) : `${render(M, "greeting", { campaign: campaign.name })}\n\n${menu()}`); };
     const packLabel = `${rules.qualification.packGrams / 1000}kg pack`;
     const productName = rules.products.find((p) => p.qualifying)?.name ?? "the qualifying product";
 
@@ -79,7 +83,7 @@ export class ConversationEngine {
     if (intent === "MENU") return home();
     // A numbered option on the current screen wins over the "9 = help" shortcut (page lists end in "9. More…").
     const numberedOption = number != null && state === "OUTLET" && Boolean(ctx.nav?.options[number - 1]);
-    if (intent === "HELP" && !numberedOption) return reply(state, render(M, "help"));
+    if (intent === "HELP" && !numberedOption) return reply(state, render(M, returning ? "returning_help" : "help"));
     if (intent === "CANCEL") { await save("HOME", {}); return reply("HOME", render(M, "cancel")); }
 
     const registration = async (): Promise<ConversationResult> => {
@@ -114,10 +118,16 @@ export class ConversationEngine {
           await this.deps.crm?.emit({ entityType: "participant", entityId: p.id, entityVersion: p.version, payload: { firstName: p.firstName, surname: p.surname, phone: maskPhone(p.channelUid), location: p.location, status: p.status }, correlationId: input.correlationId });
           await this.deps.crm?.emit({ entityType: "enrollment", entityId: `${p.id}:${cid}`, entityVersion: 1, payload: { participantId: p.id, campaignCode: campaign.code, termsVersion: res.enrollment.termsVersion, privacyVersion: res.enrollment.privacyVersion, marketingConsent: res.enrollment.marketingConsent, acceptedAt: res.enrollment.acceptedAt }, correlationId: input.correlationId });
           await save("HOME", { lastSubmissionId: ctx.lastSubmissionId }, { participantId: p.id });
-          return reply("HOME", [render(M, "registered", { first_name: p.firstName }), menu()], { participantId: p.id });
+          const m = reg.updating ? returningMenu() : menu();
+          return reply("HOME", `${render(M, reg.updating ? "updated" : "registered", { first_name: p.firstName })}\n\n${m}`, { participantId: p.id });
         }
         default: return home();
       }
+    };
+
+    const beginDetailsUpdate = async (): Promise<ConversationResult> => {
+      const reg = { firstName: participant?.firstName, surname: participant?.surname, location: participant?.location ?? undefined, identityMask: participant?.identityMask ?? undefined, updating: true } as Record<string, string | boolean | undefined>;
+      await save("REG_NAME", { ...ctx, reg }); return reply("REG_NAME", [render(M, "update_intro", { first_name: participant?.firstName ?? "" }), render(M, "reg_first")]);
     };
 
     const startEntry = async (): Promise<ConversationResult> => {
@@ -181,6 +191,14 @@ export class ConversationEngine {
       }
       return reply(state, render(M, "outlet_pick_number"));
     };
+    const resumeEntry = async (): Promise<ConversationResult> => {
+      const resumeState = ctx.resumeState;
+      if (resumeState === "OUTLET") return showRetailers(0);
+      if (resumeState === "OUTLET_CONFIRM" && ctx.resumeOutletLabel) { await save("OUTLET_CONFIRM", { ...ctx, outletId: ctx.resumeOutletId, outletLabel: ctx.resumeOutletLabel, resumeState: undefined, resumeOutletId: undefined, resumeOutletLabel: undefined }); return reply("OUTLET_CONFIRM", render(M, "outlet_verify", { outlet: ctx.resumeOutletLabel })); }
+      if (resumeState === "RECEIPT" && ctx.resumeOutletLabel) { await save("RECEIPT", { ...ctx, outletId: ctx.resumeOutletId, outletLabel: ctx.resumeOutletLabel, resumeState: undefined, resumeOutletId: undefined, resumeOutletLabel: undefined }); return reply("RECEIPT", render(M, "outlet_confirmed", { outlet: ctx.resumeOutletLabel })); }
+      return reply("HOME", render(M, "resume_none"));
+    };
+
     const receiptFlow = async ({ remembered = false } = {}): Promise<ConversationResult> => {
       if (intent === "BACK") return showRetailers(0);
       if (intent === "ENTER") return startEntry();
@@ -222,8 +240,20 @@ export class ConversationEngine {
 
     switch (state) {
       case "HOME": {
+        if (returning && number != null) {
+          if (number === 1) return startEntry();
+          if (number === 2) return resumeEntry();
+          if (number === 3) return flags.participantStatus ? statusText() : reply("HOME", render(M, "status_off"));
+          if (number === 4) return reply("HOME", infoText("mechanics"));
+          if (number === 5) return reply("HOME", infoText("terms"));
+          if (number === 6) return reply("HOME", infoText("prizes"));
+          if (number === 7) return this.winnersFlow({ cid, M, ctx, state, number: null, fresh: true, save, reply });
+          if (number === 8) return beginDetailsUpdate();
+          if (number === 9) return reply("HOME", render(M, "returning_help"));
+          return home();
+        }
         if (intent === "REGISTER") {
-          if (participant && enrollment && !enrollment.withdrawnAt) { await save("REG_NAME", { reg: { firstName: participant.firstName, surname: participant.surname, location: participant.location ?? undefined, identityMask: participant.identityMask ?? undefined } }); return reply("REG_NAME", [render(M, "already_registered", { first_name: participant.firstName, surname: participant.surname }), render(M, "reg_first")]); }
+          if (returning) return beginDetailsUpdate();
           await save("REG_NAME", { reg: {} }); return reply("REG_NAME", render(M, "reg_first"));
         }
         if (intent === "ENTER") return startEntry();
