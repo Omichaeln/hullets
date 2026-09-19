@@ -91,7 +91,8 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(
 export function parseReceiptText(text: string, ctx: ExtractionContext, provenance: { provider: string; model: string; promptVersion: string | null; latencyMs?: number; confidence?: number | null; raw?: Record<string, unknown> | null }): Facts {
   const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const doc = classify(text, ctx.quality);
-  const header = lines.slice(0, 5).join(" ");
+  const itemStart = lines.findIndex((l) => /\b(retail|description|quantity|unit\s+price|amount)\b/i.test(l));
+  const header = lines.slice(0, itemStart > 0 ? itemStart : Math.min(lines.length, 20)).join(" ");
   const rn = parseReceiptNo(text); const d = parseDate(text, ctx.dateOrder); const total = parseTotal(lines.map(cleanLine));
   const items = parseLines(lines).map((li) => ({ ...li, product: matchProduct(li.description, ctx.products) }));
   const missing: string[] = []; if (!rn.receiptNo) missing.push("receipt_number"); if (!d) missing.push("transaction_date"); if (total.totalMinor == null) missing.push("total"); if (!items.length) missing.push("line_items");

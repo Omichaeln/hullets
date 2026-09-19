@@ -33,10 +33,12 @@ describe("receipt text parser", () => {
   it("outlet matching needs the retailer, not just the town; aliases match exactly", () => {
     const outlets = [{ id: "a", retailer: "Mopani Mart", branch: "Westgate", town: "Harare", aliases: ["Mopani Westgate"] }, { id: "b", retailer: "Baobab Stores", branch: "Westgate", town: "Harare", aliases: [] }];
     expect(matchOutlets("Mopani Mart Westgate Branch Harare", outlets)[0]).toMatchObject({ outletId: "a", score: 1 });
+    expect(matchOutlets("N Richa Co Masvingo", [{ id: "nr", retailer: "N Richards & Co", branch: "Masvingo", town: "Masvingo", aliases: ["N Richards Masvingo"] }])[0]).toMatchObject({ outletId: "nr" });
     expect(matchOutlets("Corner Tuckshop Unit L Harare", outlets).every((c) => c.score < 0.5)).toBe(true);
     expect(matchOutlets("Baobab Stores", outlets).find((c) => c.outletId === "b")?.score).toBe(0.4);
     expect(matchProduct("SWEETVALE BROWN SUGAR 2KG", [{ code: "X", name: "Sweetvale Brown Sugar 2kg", aliases: [], packGrams: 2000, qualifying: true }])?.code).toBe("X");
     expect(matchProduct("SUNSWEET BROWN SUGAR 2KG", [{ code: "SUNSWEET-BROWN-2KG", name: "SUNSWEET BROWN SUGAR - 2KG", aliases: ["sunsweet brown sugar"], packGrams: 2000, qualifying: true }])?.code).toBe("SUNSWEET-BROWN-2KG");
+    expect(matchProduct("SUNSWEZF BROWN SUGAR - 2Kg", [{ code: "SUNSWEET-BROWN-2KG", name: "SUNSWEET BROWN SUGAR - 2KG", aliases: ["sunsweet brown sugar"], packGrams: 2000, qualifying: true }])?.code).toBe("SUNSWEET-BROWN-2KG");
     expect(matchProduct("WHITE SUGAR 2KG", [{ code: "X", name: "Sweetvale Brown Sugar 2kg", aliases: ["brown sugar"], packGrams: 2000, qualifying: true }])).toBeNull();
   });
 });
