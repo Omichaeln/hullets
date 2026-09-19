@@ -54,7 +54,23 @@ export class QueueService {
       return { ...row, attempts: row.attempts + 1 };
     });
   }
-  async completeJob(id: string) { await this.db.update(jobs).set({ status: "done", finishedAt: new Date().toISOString(), leaseUntil: null, dedupeKey: null }).where(eq(jobs.id, id)); }
+  /**
+   * Completing a job KEEPS its dedupe key.
+   *
+   * Clearing it meant the partial unique index no longer matched, so
+   * housekeeping re-enqueued the same hourly and daily jobs on every cycle —
+   * roughly once a minute. The audit checkpoint documented as "a signed chain
+   * head every day" was being written 1,440 times a day per worker. Keys are
+   * time-scoped by their callers, so retaining them is what makes the schedule
+   * mean anything; `sweepJobs` reclaims them once the window has passed.
+   */
+  async completeJob(id: string) { await this.db.update(jobs).set({ status: "done", finishedAt: new Date().toISOString(), leaseUntil: null }).where(eq(jobs.id, id)); }
+  /** Drop finished jobs old enough that their dedupe window cannot still apply. */
+  async sweepJobs(olderThanMs = 7 * 86_400_000) {
+    const cutoff = new Date(Date.now() - olderThanMs).toISOString();
+    const r = await this.db.delete(jobs).where(and(inArray(jobs.status, ["done"]), lt(jobs.createdAt, cutoff))).returning({ id: jobs.id });
+    return r.length;
+  }
   async failJob(job: Job, error: string, permanent = false) { const dead = permanent || job.attempts >= job.maxAttempts; await this.db.update(jobs).set({ status: dead ? "dead" : "failed", leaseUntil: null, lastError: error.slice(0, 400), runAfter: dead ? job.runAfter : new Date(Date.now() + backoffMs(job.attempts, 3000, 120_000)).toISOString() }).where(eq(jobs.id, job.id)); return dead; }
   async retryJob(id: string) { const r = await this.db.update(jobs).set({ status: "pending", attempts: 0, leaseUntil: null, runAfter: new Date().toISOString() }).where(and(eq(jobs.id, id), inArray(jobs.status, ["dead", "failed"]))).returning({ id: jobs.id }); return r.length > 0; }
 

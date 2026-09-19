@@ -1,6 +1,7 @@
 # ADR 0008: QR-enabled fiscal-receipt fallback
 
-- **Status:** accepted and extended for authoritative ZIMRA evidence
+- **Status:** SUPERSEDED by [ADR 0010](0010-evidence-first-verification.md), 19 September 2026. The fallback described here fetched whatever HTTPS URL a QR code contained, with an empty allowlist permitting any public host, and let the response supply the facts an entry was judged on whenever OCR read nothing. ADR 0010 replaces it: a decoded code now yields identifiers that are looked up against a configured, allowlisted validation endpoint, and the authority's answer — never the code — is evidence. Retained for the record.
+- **Superseded status:** was accepted for implementation
 - **Date:** 2026-09-19
 - **Decision owners:** Engineering and campaign operations
 
@@ -19,11 +20,11 @@ After the configured extractor completes, the receipt pipeline performs a bounde
 3. Applies a timeout, response-byte cap, and redirect cap. Redirects are revalidated at every hop.
 4. Parses only JSON, HTML, and text responses. PDFs, scripts requiring a browser, authentication challenges, and unsupported formats remain reviewable failures rather than being executed or guessed.
 
-The fetched document is parsed through the same deterministic receipt parser. A participant may send a complete receipt image or a QR-only close-up. If the final verified page is on a configured authoritative host (`fdms.zimra.co.zw` by default), contains the platform verification marker, and exposes receipt facts, it is recorded as `zimra_verified`. Verified ZIMRA fields have higher precedence than OCR: conflicting identity, date, total, merchant, and product-line facts are replaced and an explicit `qr_authoritative_*_override` warning is recorded. Non-authoritative digital sources remain conservative: they fill empty OCR fields but do not replace conflicting OCR. In either case, digital line items are used when they contain products and are authoritative, or when OCR has no usable product lines.
+The fetched document is parsed through the same deterministic receipt parser and merged conservatively. Empty OCR fields can be filled from the digital receipt. If OCR and digital evidence disagree, the OCR value is retained and a disagreement warning is recorded so the normal review/unknown path can apply. The digital line items are used when OCR has no usable lines or has no product matches and the digital document has product lines.
 
 Each extraction stores structured QR provenance rather than the full decoded URL: decoder version, barcode format, hashes of the code and fetched document, source/final host and path, query parameter names only, content type, fields used, timestamp, status, and bounded warnings. The full URL and fetched body are never written to application logs or persistent facts.
 
-A successful QR fallback can satisfy the OCR-confidence gate because the evidence source has changed. Verified ZIMRA evidence can also turn a QR-only image whose OCR looks like a non-receipt into a receipt document. It cannot override campaign dates, participating-outlet rules, product qualification, duplicate prevention, caps, or manual-review controls.
+A successful QR fallback can satisfy the OCR-confidence gate because the evidence source has changed, but it cannot override campaign dates, participating-outlet rules, product qualification, receipt identity, duplicate prevention, caps, or manual-review disagreement handling.
 
 ## Configuration
 
@@ -32,7 +33,6 @@ A successful QR fallback can satisfy the OCR-confidence gate because the evidenc
 - `QR_FETCH_MAX_BYTES` defaults to 1,000,000 bytes.
 - `QR_FETCH_MAX_REDIRECTS` defaults to 3.
 - `QR_ALLOWED_HOSTS` is an optional comma-separated allowlist. An empty value still requires public HTTPS and SSRF checks; an allowlist is recommended once the fiscal platform’s stable hostnames are known.
-- `QR_AUTHORITATIVE_HOSTS` defaults to `fdms.zimra.co.zw` and is narrower than the fetch allowlist. Only verified official fiscal hosts belong here.
 
 The fallback runs in the existing external worker, so it is subject to the same queue lease, retry, and review monitoring as OCR.
 

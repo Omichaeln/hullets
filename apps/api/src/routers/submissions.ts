@@ -3,7 +3,7 @@ import { eq, and, desc, ne, sql, or, ilike, gte } from "drizzle-orm";
 import { schema } from "@promo/db";
 import { router, guard } from "../trpc.ts";
 import { notFound, can, maskPhone } from "@promo/core";
-const { submissions, participants, extractions, submissionItems, duplicateCandidates, reviewTasks, entries, canonicalReceipts, outlets, mediaAssets } = schema;
+const { submissions, participants, extractions, submissionItems, duplicateCandidates, reviewTasks, entries, canonicalReceipts, outlets, mediaAssets, verificationOutcomes } = schema;
 export const submissionsRouter = router({
   list: guard("submission.read").input(z.object({ campaignId: z.string().optional(), status: z.string().optional(), period: z.string().optional(), reference: z.string().optional(), participantId: z.string().optional(), phone: z.string().max(30).optional(), since: z.string().optional(), limit: z.number().int().min(1).max(200).default(50), offset: z.number().int().min(0).default(0) })).query(async ({ ctx, input }) => {
     const phoneDigits = input.phone?.replace(/\D/g, "") ?? "";
@@ -13,7 +13,7 @@ export const submissionsRouter = router({
     const rows = await ctx.app.db.select({ s: submissions, participantPhone: participants.channelUid, review: { state: reviewTasks.state, assignee: reviewTasks.assignee, slaDueAt: reviewTasks.slaDueAt } }).from(submissions).innerJoin(participants, eq(participants.id, submissions.participantId)).leftJoin(reviewTasks, eq(reviewTasks.submissionId, submissions.id)).where(conds.length ? and(...(conds as never[])) : undefined).orderBy(desc(submissions.createdAt)).limit(input.limit).offset(input.offset);
     return { rows: rows.map((r) => ({ ...r.s, participantPhone: maskPhone(r.participantPhone), review: r.review?.state ? r.review : null })), next: rows.length === input.limit ? input.offset + input.limit : null };
   }),
-  queue: guard("submission.read").query(({ ctx }) => ctx.app.pipeline.reviewQueue()),
+  queue: guard("submission.read").input(z.object({ limit: z.number().int().min(1).max(500).default(100), offset: z.number().int().min(0).default(0) }).default({ limit: 100, offset: 0 })).query(({ ctx, input }) => ctx.app.pipeline.reviewQueue(input)),
   get: guard("submission.read").input(z.object({ submissionId: z.string() })).query(async ({ ctx, input }) => {
     const s = await ctx.app.pipeline.get(input.submissionId); if (!s) throw notFound("submission");
     const canMedia = can(ctx.user.roles, "submission.media");
@@ -26,10 +26,26 @@ export const submissionsRouter = router({
     const media = s.mediaAssetId ? await ctx.app.media.get(s.mediaAssetId) : null;
     if (canMedia) await ctx.app.audit.record(ctx.app.db, { actorType: "staff", actorId: ctx.user.id, action: "submission.viewed", targetType: "submission", targetId: s.id, campaignId: s.campaignId, correlationId: ctx.correlationId });
     const p = await ctx.app.participants.get(s.participantId); const version = await ctx.app.campaigns.version(s.campaignVersionId);
+    const fiscal = await ctx.app.fiscal.forSubmission(s.id);
+    const [outcome] = await ctx.app.db.select().from(verificationOutcomes).where(eq(verificationOutcomes.submissionId, s.id));
+    const latestFacts = (xs.at(-1)?.facts ?? null) as { ledger?: unknown; report?: unknown } | null;
     return { submission: s, participant: ctx.app.participants.mask(p), outlet: s.selectedOutletId ? await ctx.app.campaigns.outlet(s.selectedOutletId) : null, rulesVersion: version ? { versionNo: version.versionNo, configHash: version.configHash } : null,
       media: media ? { id: media.id, width: media.width, height: media.height, mime: media.mime, bytes: media.bytes, quality: media.quality, status: media.status, viewable: canMedia } : null,
       extractions: xs.map((x) => ({ ...x, ocrText: canMedia ? x.ocrText : null, raw: canMedia ? x.raw : null })), items: await ctx.app.db.select().from(submissionItems).where(eq(submissionItems.submissionId, s.id)).orderBy(submissionItems.lineNo),
-      duplicates: dups.map((d) => ({ ...d.d, candidateReference: d.candRef, candidateStatus: d.candStatus, sameParticipant: d.candParticipant === s.participantId })), review: review ?? null, entry: entry ?? null, canonical: canonical ?? null, attempts };
+      duplicates: dups.map((d) => ({ ...d.d, candidateReference: d.candRef, candidateStatus: d.candStatus, sameParticipant: d.candParticipant === s.participantId })), review: review ?? null, entry: entry ?? null, canonical: canonical ?? null, attempts,
+      // The reviewer should not have to reconstruct the transaction. The chain
+      // runs: image -> fiscal result -> OCR/AI -> user answers -> rule results
+      // -> discrepancies -> recommendation, in that order, with the source of
+      // every resolved value named.
+      evidenceChain: {
+        fiscal: fiscal ? { status: fiscal.status, adapter: fiscal.adapter, validated: fiscal.status === "valid", deviceId: fiscal.deviceId, fiscalDayNo: fiscal.fiscalDayNo, receiptGlobalNo: fiscal.receiptGlobalNo, invoiceNo: fiscal.invoiceNo, merchantName: fiscal.merchantName, branchName: fiscal.branchName, txnDate: fiscal.txnDate, currency: fiscal.currency, totalMinor: fiscal.totalMinor, taxMinor: fiscal.taxMinor, lines: fiscal.lines, fetchedAt: fiscal.fetchedAt, errorCode: fiscal.errorCode, verificationCodePresent: Boolean(fiscal.verificationCode) } : null,
+        ledger: latestFacts?.ledger ?? null,
+        report: latestFacts?.report ?? null,
+        userEvidence: s.userEvidence ?? {},
+        pendingFields: s.pendingFields ?? [],
+        tier: s.verificationTier, authority: s.authority,
+        outcome: outcome ?? null,
+      } };
   }),
   assign: guard("submission.review").input(z.object({ submissionId: z.string() })).mutation(async ({ ctx, input }) => { await ctx.app.pipeline.assign(input.submissionId, ctx.user.id); return { ok: true }; }),
   release: guard("submission.review").input(z.object({ submissionId: z.string() })).mutation(async ({ ctx, input }) => { await ctx.app.pipeline.release(input.submissionId, ctx.user.id); return { ok: true }; }),
@@ -38,6 +54,11 @@ export const submissionsRouter = router({
   correctFacts: guard("submission.review").input(z.object({ submissionId: z.string(), date: z.string().nullable().optional(), receiptNo: z.string().nullable().optional(), totalMinor: z.number().int().nullable().optional(), note: z.string().min(3).max(300) })).mutation(({ ctx, input }) => ctx.app.pipeline.correctFacts(input.submissionId, input, ctx.user.id, input.note)),
   resolveDuplicate: guard("submission.review").input(z.object({ candidateId: z.string(), resolution: z.enum(["same_purchase", "different_purchase"]), note: z.string().max(300).optional() })).mutation(async ({ ctx, input }) => { await ctx.app.pipeline.resolveDuplicate(input.candidateId, input.resolution, ctx.user.id, input.note); return { ok: true }; }),
   reprocess: guard("submission.reprocess").input(z.object({ submissionId: z.string(), reason: z.string().min(3).max(200) })).mutation(({ ctx, input }) => ctx.app.pipeline.reprocess(input.submissionId, ctx.user.id, input.reason)),
+  /** Agreement between the automated recommendation and human reviewers. Offline calibration data only. */
+  calibration: guard("report.read").input(z.object({ campaignId: z.string().optional() })).query(async ({ ctx, input }) => {
+    const cid = input.campaignId ?? (await ctx.app.campaigns.current())?.id; if (!cid) throw notFound("campaign");
+    return ctx.app.pipeline.calibration(cid);
+  }),
   resendResult: guard("support.handoff").input(z.object({ submissionId: z.string() })).mutation(async ({ ctx, input }) => {
     const s = await ctx.app.pipeline.get(input.submissionId); if (!s) throw notFound("submission");
     const msgs = await ctx.app.outbox.byKeyPrefix(`submission:${s.id}:outcome`); const last = msgs.at(-1); if (!last) throw notFound("result message");

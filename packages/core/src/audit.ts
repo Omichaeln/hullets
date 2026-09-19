@@ -42,13 +42,25 @@ export class AuditService {
     return tx === this.db ? this.db.transaction((t) => run(t)) : run(tx);
   }
 
-  async verify({ fromId = 0 } = {}) {
+  /**
+   * Verify one bounded page of the chain.
+   *
+   * This used to select the whole table and hash every row on the request
+   * thread. audit_events is the fastest-growing table in the system and is
+   * never pruned by design, so a single click eventually became an
+   * out-of-memory kill. Pages resume from the previous page's head: `nextFromId`
+   * is null when the chain has been walked to its end. A full sweep belongs in
+   * a job, not a request.
+   */
+  async verify({ fromId = 0, limit = 5_000 }: { fromId?: number; limit?: number } = {}) {
+    const take = Math.max(1, Math.min(50_000, limit));
     const rows = await this.db.select({
       id: auditEvents.id, prev: auditEvents.prevHash, hash: auditEvents.entryHash, body: auditEvents.body,
       actorType: auditEvents.actorType, actorId: auditEvents.actorId, action: auditEvents.action,
       targetType: auditEvents.targetType, targetId: auditEvents.targetId, reason: auditEvents.reason,
       payload: auditEvents.payload, createdAt: auditEvents.createdAt,
-    }).from(auditEvents).where(gt(auditEvents.id, fromId)).orderBy(asc(auditEvents.id));
+    }).from(auditEvents).where(gt(auditEvents.id, fromId)).orderBy(asc(auditEvents.id)).limit(take + 1);
+    const more = rows.length > take; if (more) rows.pop();
     let prev = ""; if (fromId) { const [r] = await this.db.select({ h: auditEvents.entryHash }).from(auditEvents).where(eq(auditEvents.id, fromId)); prev = r?.h ?? ""; }
     const broken: Array<{ id: number; what: string; fields?: string[] }> = [];
     for (const r of rows) {
@@ -64,7 +76,19 @@ export class AuditService {
       if (fields.length) broken.push({ id: r.id, what: "body_column_mismatch", fields });
       prev = r.hash;
     }
-    return { ok: broken.length === 0, total: rows.length, brokenCount: broken.length, broken: broken.slice(0, 50), head: prev };
+    return { ok: broken.length === 0, total: rows.length, brokenCount: broken.length, broken: broken.slice(0, 50), head: prev, fromId, nextFromId: more ? rows[rows.length - 1]!.id : null, complete: !more };
+  }
+  /** Walk the whole chain in bounded pages. For a job or a CLI, never a request. */
+  async verifyAll({ pageSize = 5_000, maxPages = 10_000 } = {}) {
+    let fromId = 0, total = 0, brokenCount = 0; const broken: Array<{ id: number; what: string; fields?: string[] }> = []; let head = "";
+    for (let page = 0; page < maxPages; page++) {
+      const r = await this.verify({ fromId, limit: pageSize });
+      total += r.total; brokenCount += r.brokenCount; head = r.head;
+      for (const b of r.broken) if (broken.length < 50) broken.push(b);
+      if (r.nextFromId == null) return { ok: brokenCount === 0, total, brokenCount, broken, head, complete: true };
+      fromId = r.nextFromId;
+    }
+    return { ok: brokenCount === 0, total, brokenCount, broken, head, complete: false };
   }
 
   async checkpoint(createdBy: string) {

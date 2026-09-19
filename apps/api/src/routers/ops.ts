@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router, guard, publicProcedure, sessionProcedure } from "../trpc.ts";
-import { validateActivation, notFound, ROLES, permissionMatrix, DEFINITIONS, csvCell, conflict } from "@promo/core";
+import { validateActivation, notFound, ROLES, permissionMatrix, DEFINITIONS, csvCell, conflict, can } from "@promo/core";
 import { eq, and, desc } from "drizzle-orm";
 import { schema } from "@promo/db";
 const { conversations } = schema;
@@ -44,7 +44,7 @@ export const staffRouter = router({
 });
 export const auditRouter = router({
   list: guard("audit.read").input(z.object({ targetType: z.string().optional(), targetId: z.string().optional(), actorId: z.string().optional(), action: z.string().optional(), campaignId: z.string().optional(), limit: z.number().int().min(1).max(200).default(50), offset: z.number().int().min(0).default(0) })).query(({ ctx, input }) => ctx.app.audit.list(input)),
-  verify: guard("audit.read").query(({ ctx }) => ctx.app.audit.verify()),
+  verify: guard("audit.read").input(z.object({ fromId: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(20_000).default(5_000) }).default({ fromId: 0, limit: 5_000 })).query(({ ctx, input }) => ctx.app.audit.verify(input)),
   checkpoint: guard("audit.read").mutation(({ ctx }) => ctx.app.audit.checkpoint(ctx.user.id)),
 });
 export const reportsRouter = router({
@@ -52,19 +52,39 @@ export const reportsRouter = router({
   definitions: guard("report.read").query(() => DEFINITIONS),
   export: guard("report.export").input(z.object({ scope: z.enum(["submissions", "entries", "winners", "participants", "outlets"]), campaignId: z.string().optional(), format: z.enum(["json", "csv"]).default("json") })).query(async ({ ctx, input }) => {
     const cid = input.campaignId ?? (await ctx.app.campaigns.current())?.id; if (!cid) throw notFound("campaign");
-    const rows = (await ctx.app.reports.exportRows(input.scope, cid)) as Array<Record<string, unknown>>;
-    await ctx.app.audit.record(ctx.app.db, { actorType: "staff", actorId: ctx.user.id, action: "report.export", targetType: "report", targetId: input.scope, campaignId: cid, reason: `${rows.length} rows`, payload: { scope: input.scope, format: input.format, count: rows.length } });
+    const [rows, total] = await Promise.all([ctx.app.reports.exportRows(input.scope, cid) as Promise<Array<Record<string, unknown>>>, ctx.app.reports.exportCount(input.scope, cid)]);
+    const truncated = total > rows.length;
+    await ctx.app.audit.record(ctx.app.db, { actorType: "staff", actorId: ctx.user.id, action: "report.export", targetType: "report", targetId: input.scope, campaignId: cid, reason: `${rows.length} of ${total} rows`, payload: { scope: input.scope, format: input.format, count: rows.length, total, truncated } });
     const watermark = `${ctx.user.email} ${new Date().toISOString()}`;
-    if (input.format === "csv") { const head = rows[0] ? Object.keys(rows[0]) : []; return { format: "csv" as const, watermark, count: rows.length, csv: [head.join(","), ...rows.map((r) => head.map((k) => csvCell(r[k])).join(","))].join("\r\n") + `\r\n# exported by ${watermark}` }; }
-    return { format: "json" as const, watermark, count: rows.length, rows };
+    // A truncated export says so, in the file. An auditor receiving 50,000 rows
+    // of 120,000 with no indication has an incomplete dataset that reads as
+    // complete.
+    const note = truncated ? `# WARNING: truncated at ${rows.length} of ${total} rows` : null;
+    if (input.format === "csv") { const head = rows[0] ? Object.keys(rows[0]) : []; return { format: "csv" as const, watermark, count: rows.length, total, truncated, csv: [head.join(","), ...rows.map((r) => head.map((k) => csvCell(r[k])).join(","))].join("\r\n") + `\r\n# exported by ${watermark}` + (note ? `\r\n${note}` : "") }; }
+    return { format: "json" as const, watermark, count: rows.length, total, truncated, rows };
   }),
 });
+/**
+ * Who can see the staff roster on the readiness page.
+ *
+ * It used to list every account with its email, roles, MFA state and whether
+ * the bootstrap password was still unchanged, to anyone signed in — which told
+ * a low-privileged account exactly which administrators to go after. Account
+ * administrators still see the detail; everyone else gets the counts, which is
+ * what the readiness signal actually needs.
+ */
+async function staffReadiness(ctx: { app: { auth: { list(): Promise<Array<{ email: string; roles: string[]; mfaEnabled: boolean; mustChangePassword: boolean; status: string }>> } }; user: { roles: string[] } }) {
+  const users = await ctx.app.auth.list();
+  if (can(ctx.user.roles as never, "staff.manage")) return { detail: users.map((u) => ({ email: u.email, roles: u.roles, mfa: u.mfaEnabled, temporaryPassword: u.mustChangePassword, status: u.status })), counts: null };
+  const active = users.filter((u) => u.status === "active");
+  return { detail: null, counts: { total: users.length, active: active.length, withMfa: active.filter((u) => u.mfaEnabled).length, temporaryPassword: active.filter((u) => u.mustChangePassword).length } };
+}
 export const readinessRouter = router({
   get: sessionProcedure.query(async ({ ctx }) => {
     const c = await ctx.app.campaigns.current(); const decisions = c ? await ctx.app.campaigns.listDecisions(c.id) : [];
     const evidence = await Promise.all(["receipt_benchmark_accepted", "restore_rehearsal", "client_uat_signoff", "load_benchmark"].map(async (k) => ({ kind: k, value: await ctx.app.campaigns.setting(`evidence.${k}`, null) })));
     const transport = ctx.app.transport.health(); const extractor = await ctx.app.extractor.health(); const crm = await ctx.app.crm.health();
-    return { environment: ctx.app.environment, campaign: c ? { id: c.id, code: c.code, name: c.name, status: c.status, sample: c.sample } : null, sampleData: await ctx.app.campaigns.setting("sample_data", null), providers: { transport, extractor, crm }, openDecisions: decisions.filter((d) => d.blocksActivation && !["approved", "not_required"].includes(d.status)).map((d) => ({ id: d.decisionId, question: d.question, testValue: d.testValue })), evidence, activation: c ? await validateActivation({ cfg: ctx.app.cfg, environment: ctx.app.environment, campaignId: c.id, campaigns: ctx.app.campaigns, auth: ctx.app.auth, extractor: ctx.app.extractor, transport: ctx.app.transport, crm: ctx.app.crm }) : null, levels: { locallyTestable: true, integratedClientTesting: transport.mode === "configured" && extractor.mode === "real" && extractor.ok && (crm.mode === "configured" || decisions.some((d) => d.decisionId === "D-19" && /post-launch|not required/i.test(d.approvedValue ?? ""))), production: false }, staff: (await ctx.app.auth.list()).map((u) => ({ email: u.email, roles: u.roles, mfa: u.mfaEnabled, temporaryPassword: u.mustChangePassword, status: u.status })) };
+    return { environment: ctx.app.environment, campaign: c ? { id: c.id, code: c.code, name: c.name, status: c.status, sample: c.sample } : null, sampleData: await ctx.app.campaigns.setting("sample_data", null), providers: { transport, extractor, crm, fiscal: await ctx.app.fiscal.health() }, openDecisions: decisions.filter((d) => d.blocksActivation && !["approved", "not_required"].includes(d.status)).map((d) => ({ id: d.decisionId, question: d.question, testValue: d.testValue })), evidence, activation: c ? await validateActivation({ cfg: ctx.app.cfg, environment: ctx.app.environment, campaignId: c.id, campaigns: ctx.app.campaigns, auth: ctx.app.auth, extractor: ctx.app.extractor, transport: ctx.app.transport, crm: ctx.app.crm }) : null, levels: { locallyTestable: true, integratedClientTesting: transport.mode === "configured" && extractor.mode === "real" && extractor.ok && (crm.mode === "configured" || decisions.some((d) => d.decisionId === "D-19" && /post-launch|not required/i.test(d.approvedValue ?? ""))), production: false }, staff: await staffReadiness(ctx) };
   }),
 });
 export const publicRouter = router({

@@ -22,17 +22,25 @@ import { Worker } from "./ops/worker.ts";
 import { CloudApiTransport } from "./whatsapp/cloud-api.ts";
 import { SimulatorTransport } from "./whatsapp/simulator.ts";
 import { AiVerificationService } from "./verification/service.ts";
+import { FiscalService } from "./fiscal/service.ts";
+import { HttpFdmsAdapter, NoFdmsAdapter, type FdmsAdapter } from "./fiscal/fdms.ts";
+import { SimulatorFdmsAdapter } from "./fiscal/simulator.ts";
 import type { WhatsAppTransport } from "./whatsapp/transport.ts";
 import path from "node:path";
 
 export type App = Awaited<ReturnType<typeof createApp>>;
 /** Wire the modular monolith. Options let tests inject providers; production wiring comes from configuration only. */
-export async function createApp(opts: { config?: Config; log?: Logger; transport?: WhatsAppTransport; extractor?: Extractor; crmAdapter?: CrmAdapter; storage?: StorageDriver; migrate?: boolean } = {}) {
+export async function createApp(opts: { config?: Config; log?: Logger; transport?: WhatsAppTransport; extractor?: Extractor; crmAdapter?: CrmAdapter; storage?: StorageDriver; fdmsAdapter?: FdmsAdapter; migrate?: boolean } = {}) {
   const cfg = opts.config ?? loadConfig();
   const problems = validateConfig(cfg); if (problems.length) throw new Error(`configuration invalid: ${problems.join("; ")}`);
   const log = opts.log ?? (cfg.ENVIRONMENT === "test" ? silentLogger() : createLogger(cfg.LOG_LEVEL));
   const pool = createPool(cfg.DATABASE_URL, { max: cfg.DB_POOL_MAX, statementTimeoutMs: cfg.DB_STATEMENT_TIMEOUT_MS, connectionTimeoutMs: cfg.DB_CONNECTION_TIMEOUT_MS }); const db: Db = createDb(pool);
-  if (opts.migrate !== false) await migrate(db);
+  // Migrations are a deploy step, not a boot step: `npm run db:migrate` runs
+  // once before the services start. Booting them here too meant every replica
+  // migrated on every start, which is how three processes end up racing the
+  // same DDL. Local and test still migrate on boot for ergonomics.
+  const migrateOnBoot = opts.migrate ?? ["local", "test"].includes(cfg.ENVIRONMENT);
+  if (migrateOnBoot) await migrate(db, pool);
   await db.insert(schema.schemaMeta).values({ key: "environment", value: cfg.ENVIRONMENT }).onConflictDoNothing();
   const [envRow] = await db.select().from(schema.schemaMeta).where(eq(schema.schemaMeta.key, "environment")); const environment = envRow?.value ?? cfg.ENVIRONMENT;
   if (environment !== cfg.ENVIRONMENT) log.warn({ database: environment, config: cfg.ENVIRONMENT }, "database environment differs from configuration; the database value governs");
@@ -46,17 +54,26 @@ export async function createApp(opts: { config?: Config; log?: Logger; transport
   const media = new MediaService(db, storage, cfg.RETENTION_MEDIA_DAYS);
   const extractor = opts.extractor ?? createExtractor(cfg);
   const verifier = new AiVerificationService({ provider: cfg.AI_VERIFICATION_PROVIDER, enabled: cfg.aiVerificationEnabled, required: cfg.aiVerificationRequired, apiKey: cfg.AI_VERIFICATION_PROVIDER === "openai" ? cfg.OPENAI_API_KEY : cfg.ANTHROPIC_API_KEY, model: cfg.AI_VERIFICATION_MODEL, baseURL: cfg.AI_VERIFICATION_PROVIDER === "openai" ? cfg.OPENAI_BASE_URL : cfg.ANTHROPIC_BASE_URL, timeoutMs: cfg.AI_VERIFICATION_TIMEOUT_MS, minProbability: cfg.AI_VERIFICATION_MIN_PROBABILITY, maxRisk: "low" });
+  // Fiscal verification. The allowlist is the gate: with no hosts configured
+  // the HTTP adapter reports not_configured, and every receipt takes the OCR
+  // path rather than the system fetching wherever a QR code points.
+  const fdms: FdmsAdapter = opts.fdmsAdapter
+    ?? (cfg.FISCAL_PROVIDER === "zimra-fdms" ? new HttpFdmsAdapter({ baseUrl: cfg.FISCAL_BASE_URL, apiKey: cfg.FISCAL_API_KEY, allowedHosts: cfg.fiscalAllowedHosts, timeoutMs: cfg.FISCAL_TIMEOUT_MS, maxBytes: cfg.FISCAL_MAX_BYTES, maxRedirects: cfg.FISCAL_MAX_REDIRECTS, contractMode: cfg.FISCAL_CONTRACT_MODE })
+      : cfg.FISCAL_PROVIDER === "simulator" ? new SimulatorFdmsAdapter()
+      : new NoFdmsAdapter());
+  const fiscal = new FiscalService(db, fdms, { enabled: cfg.fiscalEnabled, required: cfg.fiscalRequired, layout: cfg.fiscalQrLayout });
   const signals = new OpsSignals(db); const queue = new QueueService(db); const outbox = new OutboxService(db);
   const crmAdapter = opts.crmAdapter ?? (cfg.CRM_PROVIDER === "http-contract" ? new HttpContractAdapter(cfg.CRM_BASE_URL, cfg.CRM_TOKEN, cfg.CRM_TIMEOUT_MS) : new NoCrmAdapter());
   const crm = new CrmService(db, crmAdapter, environment, signals); participants.crm = crm;
-  const pipeline = new ReceiptPipeline(db, { media, extractor, verifier, campaigns, participants, audit, outbox, queue, crm, alerts: signals, reviewSlaHours: cfg.REVIEW_SLA_HOURS, qr: { enabled: cfg.qrFallbackEnabled, timeoutMs: cfg.QR_FETCH_TIMEOUT_MS, maxBytes: cfg.QR_FETCH_MAX_BYTES, maxRedirects: cfg.QR_FETCH_MAX_REDIRECTS, allowedHosts: cfg.qrAllowedHosts, authoritativeHosts: cfg.qrAuthoritativeHosts } });
+  const pipeline = new ReceiptPipeline(db, { media, extractor, verifier, campaigns, participants, audit, outbox, queue, crm, alerts: signals, reviewSlaHours: cfg.REVIEW_SLA_HOURS, fiscal });
   const winners = new WinnerService(db, { campaigns, participants, audit, outbox, crm, claimDays: cfg.CLAIM_WINDOW_DAYS });
   const draws = new DrawService(db, { campaigns, audit });
   const conversation = new ConversationEngine(db, { campaigns, participants, intake: pipeline, winners, crm, audit });
   const transport: WhatsAppTransport = opts.transport ?? (cfg.WHATSAPP_PROVIDER === "cloud-api" ? new CloudApiTransport({ graphVersion: cfg.META_GRAPH_VERSION, phoneNumberId: cfg.META_PHONE_NUMBER_ID, accessToken: cfg.META_ACCESS_TOKEN, appSecret: cfg.META_APP_SECRET, verifyToken: cfg.META_VERIFY_TOKEN, defaultCountryCode: cfg.DEFAULT_COUNTRY_CODE }) : new SimulatorTransport());
   if (environment === "production" && transport.mode !== "configured") throw new Error("a simulated transport is forbidden in production");
+  if (environment === "production" && fiscal.mode === "simulated") throw new Error("a simulated fiscal authority is forbidden in production");
   const reports = new ReportService(db);
-  const worker = new Worker({ db, cfg, environment, queue, outbox, crm, transport, conversation, pipeline, winners, media, campaigns, signals, audit, log });
-  return { cfg, environment, log, pool, db, audit, auth, campaigns, participants, media, storage, extractor, verifier, signals, queue, outbox, crm, pipeline, winners, draws, conversation, transport, reports, worker,
+  const worker = new Worker({ db, cfg, environment, queue, outbox, crm, transport, conversation, pipeline, winners, media, campaigns, signals, audit, auth, log });
+  return { cfg, environment, log, pool, db, audit, auth, campaigns, participants, media, storage, extractor, verifier, fiscal, signals, queue, outbox, crm, pipeline, winners, draws, conversation, transport, reports, worker,
     async close() { worker.stop(); await extractor.close?.(); await pool.end(); } };
 }

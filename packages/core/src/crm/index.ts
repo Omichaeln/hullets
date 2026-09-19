@@ -1,5 +1,5 @@
 import { eq, and, lt, or, isNull, inArray, desc, asc, sql } from "drizzle-orm";
-import { schema, type Db } from "@promo/db";
+import { schema, type Db, type DbOrTx } from "@promo/db";
 import { newId } from "../util/ids.ts";
 import { backoffMs } from "../util/time.ts";
 import type { AlertSink } from "../receipt/pipeline.ts";
@@ -45,10 +45,19 @@ export class NoCrmAdapter implements CrmAdapter { readonly name = "none"; async 
 export class CrmService {
   constructor(private db: Db, private adapter: CrmAdapter, private environment: string, private alerts: AlertSink) {}
   key(type: string, id: string) { return `${this.environment}:${type}:${id}`; }
-  async emit(e: { entityType: string; entityId: string; entityVersion: number; payload: Record<string, unknown>; correlationId?: string | null }) {
+  /**
+   * Queue an outbound CRM change.
+   *
+   * Takes the caller's transaction. It used to write on `this.db` even when
+   * called from inside one, which broke the guarantee the pipeline documents:
+   * a rolled-back award still told the vendor an entry existed. It also took a
+   * second pooled connection while the first was held, which is how a ten
+   * connection pool deadlocks under load.
+   */
+  async emit(tx: DbOrTx, e: { entityType: string; entityId: string; entityVersion: number; payload: Record<string, unknown>; correlationId?: string | null }) {
     const externalKey = this.key(e.entityType, e.entityId);
     const record = mapEntity(e.entityType, { ...e.payload, externalKey, participantKey: e.payload.participantId ? this.key("participant", String(e.payload.participantId)) : undefined, winnerKey: e.payload.winnerId ? this.key("winner", String(e.payload.winnerId)) : undefined });
-    const r = await this.db.insert(crmEvents).values({ id: newId("crm"), provider: this.adapter.name, entityType: e.entityType, entityId: e.entityId, entityVersion: e.entityVersion, mappingVersion: MAPPING_VERSION, externalKey, payload: record, correlationId: e.correlationId ?? null }).onConflictDoNothing().returning({ id: crmEvents.id });
+    const r = await tx.insert(crmEvents).values({ id: newId("crm"), provider: this.adapter.name, entityType: e.entityType, entityId: e.entityId, entityVersion: e.entityVersion, mappingVersion: MAPPING_VERSION, externalKey, payload: record, correlationId: e.correlationId ?? null }).onConflictDoNothing().returning({ id: crmEvents.id });
     return { id: r[0]?.id ?? null, externalKey };
   }
   async deliverOne() {

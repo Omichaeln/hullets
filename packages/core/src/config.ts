@@ -14,6 +14,9 @@ export const CONFIG_DOC: Array<{ name: string; default: string; description: str
   { name: "PUBLIC_BASE_URL", default: "", description: "Public HTTPS origin of this service (webhook URL, console links)." },
   { name: "CORS_ORIGINS", default: "", description: "Comma-separated browser origins allowed to call the API cross-origin. Empty (default) when the API serves the console itself." },
   { name: "HTTP_MAX_IN_FLIGHT", default: "200", description: "Maximum concurrent webhook/tRPC requests per API replica before load shedding." },
+  { name: "TRUSTED_PROXY_HOPS", default: "1", description: "Number of trusted reverse proxies in front of this service. Sets how much of X-Forwarded-For is believed; 0 disables the header entirely. Never set it higher than the real hop count: everything beyond it is client-supplied." },
+  { name: "HTTP_JSON_LIMIT", default: "512kb", description: "Maximum tRPC request body. The simulator upload route has its own larger limit." },
+  { name: "HTTP_UPLOAD_LIMIT", default: "20mb", description: "Maximum body for the staff simulator upload route (non-production)." },
   { name: "MEDIA_ROOT", default: "./data/media", description: "Private receipt media root (filesystem adapter). Never inside the web root." },
   { name: "STORAGE_DRIVER", default: "fs", description: "fs | s3 (S3-compatible bucket via S3_* variables)." },
   { name: "S3_BUCKET", default: "", description: "Bucket for STORAGE_DRIVER=s3." },
@@ -41,12 +44,16 @@ export const CONFIG_DOC: Array<{ name: string; default: string; description: str
   { name: "ANTHROPIC_MODEL", default: "claude-sonnet-5", description: "Vision model id." },
   { name: "ANTHROPIC_BASE_URL", default: "", description: "Optional API base override." },
   { name: "EXTRACTION_TIMEOUT_MS", default: "45000", description: "Per-image extraction timeout." },
-  { name: "QR_FALLBACK_ENABLED", default: "true", description: "Try QR/barcode fiscal-receipt evidence when OCR is incomplete." },
-  { name: "QR_FETCH_TIMEOUT_MS", default: "8000", description: "Per-hop HTTPS timeout for a decoded fiscal receipt URL." },
-  { name: "QR_FETCH_MAX_BYTES", default: "1000000", description: "Maximum fiscal document response size." },
-  { name: "QR_FETCH_MAX_REDIRECTS", default: "3", description: "Maximum HTTPS redirect hops for fiscal receipt retrieval." },
-  { name: "QR_ALLOWED_HOSTS", default: "", description: "Optional comma-separated fiscal host allowlist; empty permits public HTTPS hosts after SSRF checks." },
-  { name: "QR_AUTHORITATIVE_HOSTS", default: "fdms.zimra.co.zw", description: "Official fiscal hosts whose verified receipt pages may be treated as authoritative." },
+  { name: "FISCAL_PROVIDER", default: "none", description: "none | zimra-fdms (validate fiscal receipts against ZIMRA FDMS via FISCAL_BASE_URL) | simulator (TEST ONLY; refused outside local/test)." },
+  { name: "FISCAL_BASE_URL", default: "", description: "HTTPS validation endpoint for fiscal receipts. Its host must also appear in FISCAL_ALLOWED_HOSTS." },
+  { name: "FISCAL_API_KEY", default: "", description: "Bearer token for the fiscal validation endpoint, when one is required.", secret: true },
+  { name: "FISCAL_ALLOWED_HOSTS", default: "", description: "REQUIRED comma-separated host allowlist for fiscal lookups. Empty means fiscal verification is not configured and every receipt takes the OCR path; it never means 'any host'." },
+  { name: "FISCAL_REQUIRED", default: "false", description: "Treat an unavailable fiscal provider as a readiness failure. Leave false to degrade to OCR rather than stop intake." },
+  { name: "FISCAL_TIMEOUT_MS", default: "8000", description: "Per-hop HTTPS timeout for a fiscal validation request." },
+  { name: "FISCAL_MAX_BYTES", default: "1000000", description: "Maximum fiscal validation response size." },
+  { name: "FISCAL_MAX_REDIRECTS", default: "3", description: "Maximum HTTPS redirect hops for a fiscal validation request." },
+  { name: "FISCAL_CONTRACT_MODE", default: "html", description: "Shape of the FDMS validation response: html (the real ZIMRA verification page, reached through its 'Review Invoice' form) | json (a structured body, e.g. a vendor gateway). A JSON body is mapped as JSON whichever is set; this decides only whether an HTML page is read or refused." },
+  { name: "FISCAL_QR_LAYOUT", default: "10,4,10,16", description: "Widths of the packed ZIMRA QR tail: deviceId,fiscalDayNo,receiptGlobalNo,verificationCode. Confirm against the published FDMS specification before production; a wrong width mis-identifies every receipt." },
   { name: "AI_VERIFICATION_ENABLED", default: "false", description: "Run advisory AI receipt verification after deterministic extraction." },
   { name: "AI_VERIFICATION_REQUIRED", default: "false", description: "Treat missing AI verification as a hold/review condition." },
   { name: "AI_VERIFICATION_PROVIDER", default: "openai", description: "openai | anthropic provider used for receipt verification." },
@@ -70,21 +77,28 @@ export const CONFIG_DOC: Array<{ name: string; default: string; description: str
   { name: "SEED_ON_BOOT", default: "false", description: "Non-production only: seed the sample campaign on start if absent." },
 ];
 
+/** Widths of the packed fiscal QR tail. A malformed value falls back to the documented default rather than producing silently misaligned identifiers. */
+function parseQrLayout(v: string) {
+  const parts = String(v ?? "").split(",").map((x) => Number(x.trim()));
+  const ok = parts.length === 4 && parts.every((n) => Number.isInteger(n) && n > 0 && n <= 64);
+  const [deviceId, fiscalDayNo, receiptGlobalNo, verificationCode] = ok ? parts : [10, 4, 10, 16];
+  return { deviceId, fiscalDayNo, receiptGlobalNo, verificationCode };
+}
 const boundedInt = (fallback: number, min: number, max: number) => z.coerce.number().int().min(min).max(max).default(fallback);
 const Env = z.object({
   ENVIRONMENT: z.enum(["local", "test", "staging", "production"]).default("local"),
   DATABASE_URL: z.string().default("postgres://promo:promo@127.0.0.1:5432/promo"),
   DB_POOL_MAX: boundedInt(10, 1, 100), DB_STATEMENT_TIMEOUT_MS: boundedInt(30_000, 1_000, 120_000), DB_CONNECTION_TIMEOUT_MS: boundedInt(5_000, 500, 30_000),
   HOST: z.string().default("127.0.0.1"), PORT: z.coerce.number().int().nonnegative().default(8080), PUBLIC_BASE_URL: z.string().default(""),
-  CORS_ORIGINS: z.string().default("").transform((v) => v.split(",").map((o) => o.trim()).filter(Boolean)), HTTP_MAX_IN_FLIGHT: boundedInt(200, 10, 10_000),
+  CORS_ORIGINS: z.string().default("").transform((v) => v.split(",").map((o) => o.trim()).filter(Boolean)), HTTP_MAX_IN_FLIGHT: boundedInt(200, 10, 10_000), TRUSTED_PROXY_HOPS: boundedInt(1, 0, 5), HTTP_JSON_LIMIT: z.string().default("512kb"), HTTP_UPLOAD_LIMIT: z.string().default("20mb"),
   MEDIA_ROOT: z.string().default("./data/media"), STORAGE_DRIVER: z.enum(["fs", "s3"]).default("fs"), S3_BUCKET: z.string().default(""), S3_PREFIX: z.string().default("media"), S3_ENDPOINT: z.string().default(""), S3_REGION: z.string().default("us-east-1"), S3_ACCESS_KEY_ID: z.string().default(""), S3_SECRET_ACCESS_KEY: z.string().default(""),
   BOOTSTRAP_ADMIN_EMAIL: z.string().default(""), BOOTSTRAP_ADMIN_PASSWORD: z.string().default(""), DATA_KEY: z.string().default(""), AUDIT_SIGNING_KEY: z.string().default(""), SESSION_HOURS: z.coerce.number().positive().default(12),
   DEFAULT_COUNTRY_CODE: z.string().regex(/^\d{1,3}$/).default("263"), WHATSAPP_PROVIDER: z.enum(["cloud-api", "simulator"]).default("simulator"), META_GRAPH_VERSION: z.string().default("v21.0"), META_PHONE_NUMBER_ID: z.string().default(""), META_WABA_ID: z.string().default(""), META_ACCESS_TOKEN: z.string().default(""), META_APP_SECRET: z.string().default(""), META_VERIFY_TOKEN: z.string().default(""), OUTBOUND_ALLOWLIST: z.string().default(""),
-  EXTRACTOR: z.enum(["anthropic", "tesseract", "anthropic+tesseract", "simulator"]).default("tesseract"), ANTHROPIC_API_KEY: z.string().default(""), ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"), ANTHROPIC_BASE_URL: z.string().default(""), OPENAI_API_KEY: z.string().default(""), OPENAI_BASE_URL: z.string().default(""), EXTRACTION_TIMEOUT_MS: z.coerce.number().positive().default(45_000), QR_FALLBACK_ENABLED: z.string().default("true"), QR_FETCH_TIMEOUT_MS: boundedInt(8_000, 1_000, 30_000), QR_FETCH_MAX_BYTES: boundedInt(1_000_000, 16_384, 10_000_000), QR_FETCH_MAX_REDIRECTS: boundedInt(3, 0, 5), QR_ALLOWED_HOSTS: z.string().default(""), QR_AUTHORITATIVE_HOSTS: z.string().default("fdms.zimra.co.zw"), AI_VERIFICATION_PROVIDER: z.enum(["openai", "anthropic"]).default("openai"), AI_VERIFICATION_ENABLED: z.string().default("false"), AI_VERIFICATION_REQUIRED: z.string().default("false"), AI_VERIFICATION_MODEL: z.string().default("gpt-4o-mini"), AI_VERIFICATION_TIMEOUT_MS: boundedInt(60_000, 5_000, 120_000), AI_VERIFICATION_MIN_PROBABILITY: z.coerce.number().min(0).max(1).default(0.98),
+  EXTRACTOR: z.enum(["anthropic", "tesseract", "anthropic+tesseract", "simulator"]).default("tesseract"), ANTHROPIC_API_KEY: z.string().default(""), ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"), ANTHROPIC_BASE_URL: z.string().default(""), OPENAI_API_KEY: z.string().default(""), OPENAI_BASE_URL: z.string().default(""), EXTRACTION_TIMEOUT_MS: z.coerce.number().positive().default(45_000), FISCAL_PROVIDER: z.enum(["none", "zimra-fdms", "simulator"]).default("none"), FISCAL_BASE_URL: z.string().default(""), FISCAL_API_KEY: z.string().default(""), FISCAL_ALLOWED_HOSTS: z.string().default(""), FISCAL_REQUIRED: z.string().default("false"), FISCAL_TIMEOUT_MS: boundedInt(8_000, 1_000, 30_000), FISCAL_MAX_BYTES: boundedInt(1_000_000, 16_384, 10_000_000), FISCAL_MAX_REDIRECTS: boundedInt(3, 0, 5), FISCAL_QR_LAYOUT: z.string().default("10,4,10,16"), FISCAL_CONTRACT_MODE: z.enum(["html", "json"]).default("html"), AI_VERIFICATION_PROVIDER: z.enum(["openai", "anthropic"]).default("openai"), AI_VERIFICATION_ENABLED: z.string().default("false"), AI_VERIFICATION_REQUIRED: z.string().default("false"), AI_VERIFICATION_MODEL: z.string().default("gpt-4o-mini"), AI_VERIFICATION_TIMEOUT_MS: boundedInt(60_000, 5_000, 120_000), AI_VERIFICATION_MIN_PROBABILITY: z.coerce.number().min(0).max(1).default(0.98),
   CRM_PROVIDER: z.enum(["none", "http-contract"]).default("none"), CRM_BASE_URL: z.string().default(""), CRM_TOKEN: z.string().default(""), CRM_TIMEOUT_MS: z.coerce.number().positive().default(10_000), REVIEW_SLA_HOURS: z.coerce.number().positive().default(24), CLAIM_WINDOW_DAYS: z.coerce.number().positive().default(7), RETENTION_MEDIA_DAYS: z.coerce.number().positive().default(90),
   WORKER_MODE: z.enum(["embedded", "external", "off"]).default("embedded"), WORKER_POLL_MS: boundedInt(1_500, 250, 60_000), WORKER_EVENT_BATCH: boundedInt(25, 1, 200), WORKER_JOB_BATCH: boundedInt(10, 1, 100), LOG_LEVEL: z.string().default("info"), SEED_ON_BOOT: z.string().default("false"),
 });
-export type Config = z.infer<typeof Env> & { isProduction: boolean; isLocal: boolean; outboundAllowlist: string[]; qrAllowedHosts: string[]; qrAuthoritativeHosts: string[]; qrFallbackEnabled: boolean; aiVerificationEnabled: boolean; aiVerificationRequired: boolean };
+export type Config = z.infer<typeof Env> & { isProduction: boolean; isLocal: boolean; outboundAllowlist: string[]; fiscalAllowedHosts: string[]; fiscalEnabled: boolean; fiscalRequired: boolean; fiscalQrLayout: { deviceId: number; fiscalDayNo: number; receiptGlobalNo: number; verificationCode: number }; aiVerificationEnabled: boolean; aiVerificationRequired: boolean };
 
 export function loadDotEnv(file = process.env.ENV_FILE ?? ".env") {
   let text: string; try { text = fs.readFileSync(path.resolve(file), "utf8"); } catch { return 0; }
@@ -93,7 +107,7 @@ export function loadDotEnv(file = process.env.ENV_FILE ?? ".env") {
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (env === process.env) loadDotEnv(); const parsed = Env.safeParse(env); if (!parsed.success) throw new Error(`configuration invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`); const c = parsed.data;
-  return { ...c, isProduction: c.ENVIRONMENT === "production", isLocal: c.ENVIRONMENT === "local", outboundAllowlist: c.OUTBOUND_ALLOWLIST.split(",").map((s) => s.trim()).filter(Boolean), qrAllowedHosts: c.QR_ALLOWED_HOSTS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean), qrAuthoritativeHosts: c.QR_AUTHORITATIVE_HOSTS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean), qrFallbackEnabled: c.QR_FALLBACK_ENABLED.toLowerCase() === "true", aiVerificationEnabled: c.AI_VERIFICATION_ENABLED.toLowerCase() === "true", aiVerificationRequired: c.AI_VERIFICATION_REQUIRED.toLowerCase() === "true" };
+  return { ...c, isProduction: c.ENVIRONMENT === "production", isLocal: c.ENVIRONMENT === "local", outboundAllowlist: c.OUTBOUND_ALLOWLIST.split(",").map((s) => s.trim()).filter(Boolean), fiscalAllowedHosts: c.FISCAL_ALLOWED_HOSTS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean), fiscalEnabled: c.FISCAL_PROVIDER !== "none", fiscalRequired: c.FISCAL_REQUIRED.toLowerCase() === "true", fiscalQrLayout: parseQrLayout(c.FISCAL_QR_LAYOUT), aiVerificationEnabled: c.AI_VERIFICATION_ENABLED.toLowerCase() === "true", aiVerificationRequired: c.AI_VERIFICATION_REQUIRED.toLowerCase() === "true" };
 }
 export function validateConfig(c: Config): string[] {
   const p: string[] = [];
@@ -103,6 +117,14 @@ export function validateConfig(c: Config): string[] {
   if (c.WHATSAPP_PROVIDER === "cloud-api" && (!c.META_ACCESS_TOKEN || !c.META_APP_SECRET || !c.META_VERIFY_TOKEN || !c.META_PHONE_NUMBER_ID)) p.push("cloud-api requires META_ACCESS_TOKEN, META_APP_SECRET, META_VERIFY_TOKEN, META_PHONE_NUMBER_ID");
   if (c.EXTRACTOR.startsWith("anthropic") && !c.ANTHROPIC_API_KEY) p.push("anthropic extractor requires ANTHROPIC_API_KEY");
   if (c.aiVerificationRequired && !c.aiVerificationEnabled) p.push("AI_VERIFICATION_REQUIRED requires AI_VERIFICATION_ENABLED=true");
+  // The allowlist is the control, not a refinement of it: without it the
+  // adapter reports not_configured and receipts fall back to OCR. Saying so at
+  // startup beats discovering it from a fiscal-status metric that is all zeroes.
+  if (c.FISCAL_PROVIDER === "zimra-fdms" && !c.FISCAL_BASE_URL) p.push("FISCAL_PROVIDER=zimra-fdms requires FISCAL_BASE_URL");
+  if (c.FISCAL_PROVIDER === "zimra-fdms" && !c.fiscalAllowedHosts.length) p.push("FISCAL_PROVIDER=zimra-fdms requires FISCAL_ALLOWED_HOSTS (an empty allowlist disables fiscal verification; it never permits arbitrary hosts)");
+  if (c.FISCAL_PROVIDER === "zimra-fdms" && c.FISCAL_BASE_URL) { try { const h = new URL(c.FISCAL_BASE_URL).hostname.toLowerCase(); if (!c.fiscalAllowedHosts.some((a) => h === a || h.endsWith(`.${a}`))) p.push("FISCAL_BASE_URL host must appear in FISCAL_ALLOWED_HOSTS"); } catch { p.push("FISCAL_BASE_URL must be an absolute HTTPS URL"); } }
+  if (c.FISCAL_PROVIDER === "simulator" && !["local", "test"].includes(c.ENVIRONMENT)) p.push("FISCAL_PROVIDER=simulator is only allowed in local/test");
+  if (c.fiscalRequired && !c.fiscalEnabled) p.push("FISCAL_REQUIRED requires a FISCAL_PROVIDER");
   if (c.aiVerificationEnabled && c.AI_VERIFICATION_PROVIDER === "anthropic" && !c.ANTHROPIC_API_KEY) p.push("AI_VERIFICATION_PROVIDER=anthropic requires ANTHROPIC_API_KEY");
   if (c.aiVerificationEnabled && c.AI_VERIFICATION_PROVIDER === "openai" && !c.OPENAI_API_KEY) p.push("AI_VERIFICATION_PROVIDER=openai requires OPENAI_API_KEY");
   if (c.CRM_PROVIDER === "http-contract" && !c.CRM_BASE_URL) p.push("http-contract CRM requires CRM_BASE_URL");

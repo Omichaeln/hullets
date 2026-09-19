@@ -5,16 +5,41 @@ export const hmac = (key: string | Buffer, s: string) => crypto.createHmac("sha2
 export const randomHex = (bytes: number) => crypto.randomBytes(bytes).toString("hex");
 export const timingEqual = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
-/** Password hashing: scrypt (N=2^15) with per-user salt; format scrypt$N$salt$hash. */
-export function hashPassword(password: string): string {
+/**
+ * Password hashing: scrypt (N=2^15) with per-user salt; format scrypt$N$salt$hash.
+ *
+ * Deliberately ASYNC. scryptSync at these parameters costs ~100 ms of CPU and
+ * 32 MB, and it blocks the event loop for the whole of it — so a handful of
+ * login attempts per second starve every other request in the process, which on
+ * the default embedded-worker topology includes receipt intake. The callback
+ * form runs on the libuv threadpool and leaves the loop free.
+ */
+const SCRYPT_PARAMS = { r: 8, p: 1, maxmem: 64 * 1024 * 1024 } as const;
+const scrypt = (password: string, salt: Buffer, N: number) =>
+  new Promise<Buffer>((resolve, reject) => crypto.scrypt(password, salt, 32, { N, ...SCRYPT_PARAMS }, (err, key) => (err ? reject(err) : resolve(key as Buffer))));
+
+export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16); const N = 32768;
-  const key = crypto.scryptSync(password, salt, 32, { N, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const key = await scrypt(password, salt, N);
   return `scrypt$${N}$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }
-export function verifyPassword(password: string, stored: string): boolean {
-  const [alg, n, salt, hash] = stored.split("$"); if (alg !== "scrypt") return false;
-  const key = crypto.scryptSync(password, Buffer.from(salt, "base64url"), 32, { N: Number(n), r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [alg, n, salt, hash] = String(stored ?? "").split("$"); if (alg !== "scrypt") return false;
+  const N = Number(n); if (!Number.isInteger(N) || N < 2 || (N & (N - 1)) !== 0 || N > 1 << 20) return false;
+  const key = await scrypt(password, Buffer.from(salt, "base64url"), N);
   const h = Buffer.from(hash, "base64url"); return key.length === h.length && crypto.timingSafeEqual(key, h);
+}
+/**
+ * A throwaway hash whose cost matches a real verification, used on the
+ * unknown-account path. Without it, a miss returns in microseconds and a hit
+ * takes ~100 ms, which distinguishes real staff addresses from invented ones by
+ * timing alone.
+ */
+let dummyHash: Promise<string> | null = null;
+export async function burnPasswordTime(password: string): Promise<false> {
+  dummyHash ??= hashPassword(crypto.randomBytes(32).toString("hex"));
+  await verifyPassword(password, await dummyHash);
+  return false;
 }
 
 /** Field-level encryption (AES-256-GCM) for identity numbers and MFA secrets. Key derived from the configured key material. */

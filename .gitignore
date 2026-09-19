@@ -10,3 +10,5 @@ docs/testing/evidence/private/
 apps/console/dist/
 .DS_Store
 tmp/
+tsconfig.tsbuildinfo
+*.tsbuildinfo

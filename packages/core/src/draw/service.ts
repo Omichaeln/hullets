@@ -8,6 +8,8 @@ import type { AuditService } from "../audit.ts";
 import type { CampaignService } from "../campaign/service.ts";
 import { PrizePlan } from "../campaign/types.ts";
 import { ALGORITHM, VERIFIER_VERSION, computeOutput, planFrom, seedCommitment, type Candidate, type Plan } from "./engine.ts";
+import { insertInChunks } from "../util/batch.ts";
+import { UNRESOLVED_STATUSES } from "../receipt/pipeline.ts";
 
 const { draws, drawCandidates, drawAttempts, entries, participants, submissions, winners, auditEvents, campaignPeriods } = schema;
 export type Draw = typeof draws.$inferSelect;
@@ -31,7 +33,7 @@ export class DrawService {
     const plan: Plan = planFrom(period.prizePlan ? PrizePlan.parse(period.prizePlan) : this.deps.campaigns.planOf(version));
     const blockers: Array<{ code: string; detail?: unknown }> = [];
     if (Date.parse(period.endsAt) > Date.now()) blockers.push({ code: "PERIOD_OPEN", detail: { endsAt: period.endsAt } });
-    const unresolved = await this.db.select({ status: submissions.status, n: sql<number>`count(*)::int` }).from(submissions).where(and(eq(submissions.campaignId, campaignId), eq(submissions.periodCode, period.code), sql`${submissions.intakeAt} < ${period.endsAt}`, inArray(submissions.status, ["received", "processing", "delayed", "review"]))).groupBy(submissions.status);
+    const unresolved = await this.db.select({ status: submissions.status, n: sql<number>`count(*)::int` }).from(submissions).where(and(eq(submissions.campaignId, campaignId), eq(submissions.periodCode, period.code), sql`${submissions.intakeAt} < ${period.endsAt}`, inArray(submissions.status, [...UNRESOLVED_STATUSES]))).groupBy(submissions.status);
     if (unresolved.length) blockers.push({ code: "UNRESOLVED_SUBMISSIONS", detail: Object.fromEntries(unresolved.map((u) => [u.status, u.n])) });
     const [existing] = await this.db.select({ id: draws.id, status: draws.status }).from(draws).where(and(eq(draws.periodId, periodId), sql`${draws.status} <> 'voided'`)).orderBy(desc(draws.createdAt)).limit(1);
     if (existing) blockers.push({ code: "DRAW_EXISTS", detail: existing });
@@ -62,8 +64,15 @@ export class DrawService {
       const snapshot = { drawId: id, campaignId, periodCode: b.period.code, rulesVersionHash: b.rulesVersionHash, plan: b.plan, candidates: b.eligible, exclusions: b.exclusions, seedCommitment: seedCommitment(seedHex) };
       const snapshotHash = hashOf(snapshot);
       await tx.insert(draws).values({ id, campaignId, periodId, sequenceNo: n + 1, status: "frozen", rulesVersionHash: b.rulesVersionHash, prizePlan: b.plan, snapshot, snapshotHash, seedCommitment: snapshot.seedCommitment, seedHex, algorithm: ALGORITHM, barrier: { checkedAt: new Date().toISOString(), blockers: b.blockers, override: override ?? null }, officerId: actorId, verifierVersion: VERIFIER_VERSION });
-      if (b.eligible.length) await tx.insert(drawCandidates).values(b.eligible.map((c, i) => ({ drawId: id, position: i, entryId: c.entryId, participantId: c.participantId, units: c.units, status: "eligible" })));
-      if (b.exclusions.length) await tx.insert(drawCandidates).values(b.exclusions.map((x, i) => ({ drawId: id, position: 100_000 + i, entryId: x.entryId, participantId: x.participantId, units: 0, status: "excluded", exclusionReason: x.reason })));
+      // Both inserts are chunked: draw_candidates binds six or seven parameters
+      // per row, so a single statement breaks somewhere above ten thousand
+      // entries — well inside the size of an ordinary campaign period. Excluded
+      // rows are positioned immediately after the eligible block rather than at
+      // a fixed 100,000 offset, which collided once a period passed that many
+      // candidates; the eligible block still occupies 0..n-1, which is what
+      // verifyStored() re-reads.
+      await insertInChunks(b.eligible.map((c, i) => ({ drawId: id, position: i, entryId: c.entryId, participantId: c.participantId, units: c.units, status: "eligible" })), 6, (batch) => tx.insert(drawCandidates).values(batch));
+      await insertInChunks(b.exclusions.map((x, i) => ({ drawId: id, position: b.eligible.length + i, entryId: x.entryId, participantId: x.participantId, units: 0, status: "excluded", exclusionReason: x.reason })), 7, (batch) => tx.insert(drawCandidates).values(batch));
       await this.deps.campaigns.setPeriodStatus(tx, periodId, "closed");
       await this.deps.audit.record(tx, { actorType: "staff", actorId, action: "draw.frozen", targetType: "draw", targetId: id, campaignId, reason: override?.reason ?? null, payload: { periodCode: b.period.code, candidates: b.eligible.length, exclusions: b.exclusions.length, snapshotHash, seedCommitment: snapshot.seedCommitment, override: override ?? null } });
       return (await tx.select().from(draws).where(eq(draws.id, id)))[0];

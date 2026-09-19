@@ -53,9 +53,15 @@ describe("security, RBAC, privacy, audit", () => {
   it("audit chain verifies across all writers; checkpoints are signed", async () => { const v = await http.client(tok.auditor).audit.verify.query(); expect(v.ok).toBe(true); expect(v.total).toBeGreaterThan(20); const c = await http.client(tok.auditor).audit.checkpoint.mutate(); expect(c?.signed).toBe(true); expect(await h.app.audit.verifyCheckpoint(c!)).toEqual({ signatureOk: true, headMatches: true }); });
   it("T-15: concurrent reviewer decisions — a stale version conflicts, identity is required to credit, only one decision lands", async () => {
     const ph = "263771000302"; await h.register(ph, { first: "Rev", last: "Two", identity: "TESTREV2X" });
-    const r = await h.submit(ph, await h.simImage(h.simReceipt({ no: "" }))); expect(r.submission?.status).toBe("review");
+    // Unreadable receipt identity is put to the participant first; when they do
+    // not answer, the stalled-question sweep hands it to a reviewer.
+    const r = await h.submit(ph, await h.simImage(h.simReceipt({ no: "" }))); expect(r.submission?.status).toBe("awaiting_participant");
+    expect((await h.escalate(r.submissionId!))?.status).toBe("review");
     const c = http.client(tok.reviewer); const before = await c.submissions.get.query({ submissionId: r.submissionId! }); const v = before.submission.version;
-    await expect(c.submissions.review.mutate({ submissionId: r.submissionId!, decision: "qualified", expectedVersion: v })).rejects.toMatchObject({ data: { domainCode: "IDENTITY_INCOMPLETE" } });
+    // Qualifying a receipt whose identity could not be read is allowed, but only
+    // with a reviewer's note on the record: the award is auditable and no
+    // identity is invented that could merge this receipt with another.
+    await expect(c.submissions.review.mutate({ submissionId: r.submissionId!, decision: "qualified", expectedVersion: v })).rejects.toMatchObject({ data: { domainCode: "VALIDATION" } });
     await c.submissions.correctFacts.mutate({ submissionId: r.submissionId!, receiptNo: "FIX-1", note: "number read from the photo" });
     const [a, b] = await Promise.allSettled([c.submissions.review.mutate({ submissionId: r.submissionId!, decision: "qualified", expectedVersion: v }), c.submissions.review.mutate({ submissionId: r.submissionId!, decision: "not_qualified", reasonCode: "reviewer_decision", expectedVersion: v })]);
     expect([a.status, b.status].filter((s) => s === "fulfilled").length).toBe(1);

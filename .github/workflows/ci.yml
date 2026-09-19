@@ -1,0 +1,81 @@
+# The release gate, run on every push and pull request.
+#
+# `npm run check` existed before this file did, as a script someone had to
+# remember to type. Nothing ran it, and by the time it was next run it was red
+# in two places. A gate that is not enforced is documentation.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22.12"
+
+jobs:
+  static:
+    name: Typecheck, lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run console:build
+
+  test:
+    name: Tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: promo
+          POSTGRES_PASSWORD: promo
+          POSTGRES_DB: promo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U promo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://promo:promo@127.0.0.1:5432/promo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      # Unit and integration first: they fail fast and cover the decision logic.
+      - run: npm run test:unit
+      - run: npm run test:integration
+      # Real OCR is slower and CPU-bound; it runs last so a logic regression is
+      # reported within a couple of minutes rather than twenty.
+      - run: npm run test:ocr
+
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npm run audit:deps

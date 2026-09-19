@@ -22,6 +22,13 @@
       "when": 1789832910990,
       "tag": "0002_small_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789844565282,
+      "tag": "0003_evidence_and_auth",
+      "breakpoints": true
     }
   ]
 }

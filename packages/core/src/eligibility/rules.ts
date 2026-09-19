@@ -12,7 +12,15 @@ import type { Rules } from "../campaign/types.ts";
 export type Outcome = "pass" | "fail" | "unknown";
 export type RuleResult = { rule: string; outcome: Outcome; reason: string | null; evidence: unknown };
 export type Disposition = "qualified" | "not_qualified" | "review" | "reupload";
-export type Context = { intakeAt: string; campaignOpen: boolean; windowStart: string; windowEnd: string; selectedOutletId: string | null; selectedOutletParticipating: boolean; enrolled: boolean; participantActive: boolean; periodEntryCount: number; campaignEntryCount: number; imageQuality: { blurry?: boolean; tooDark?: boolean; lowContrast?: boolean } };
+export type Context = { intakeAt: string; campaignOpen: boolean; windowStart: string; windowEnd: string; selectedOutletId: string | null; selectedOutletParticipating: boolean; enrolled: boolean; participantActive: boolean; periodEntryCount: number; campaignEntryCount: number; imageQuality: { blurry?: boolean; tooDark?: boolean; lowContrast?: boolean };
+  /**
+   * Whether ANY source established which outlet this was. Distinct from
+   * `selectedOutletParticipating`: "we do not know the shop" and "the shop is
+   * not in the promotion" are different findings, and collapsing them turned
+   * every receipt whose header we could not match into an outright rejection
+   * instead of a question we could have asked.
+   */
+  outletResolved?: boolean };
 export type Evaluation = { disposition: Disposition; reason: string; rules: RuleResult[]; primaryPacks: number; totalGrams: number; matched: Array<{ code: string; quantity: number | null; packGrams: number | null; grams: number | null; line: string }>; units: number };
 
 const inWindow = (date: string, start: string, end: string) => { const t = Date.parse(`${date}T12:00:00Z`); const s = Date.parse(start), e = Date.parse(end); const dayStart = Date.UTC(new Date(s).getUTCFullYear(), new Date(s).getUTCMonth(), new Date(s).getUTCDate()); return t >= dayStart && t < e; };
@@ -38,7 +46,9 @@ export function evaluate(facts: Facts, rules: Rules, ctx: Context): Evaluation {
   else if (tx.dateAmbiguous) { const alt = swap(tx.date); const a = inWindow(tx.date, ctx.windowStart, ctx.windowEnd), b = alt ? inWindow(alt, ctx.windowStart, ctx.windowEnd) : a; if (a) add("purchase_date", "pass", null, { date: tx.date, alt, ambiguous: true, dateOrder: rules.dateOrder }); else if (!b) add("purchase_date", "fail", "date_outside_window", { date: tx.date, alt }); else add("purchase_date", "unknown", "date_ambiguous", { date: tx.date, alt }); }
   else add("purchase_date", inWindow(tx.date, ctx.windowStart, ctx.windowEnd) ? "pass" : "fail", "date_outside_window", { date: tx.date, window: [ctx.windowStart, ctx.windowEnd] });
   // 5. outlet
-  add("outlet_participating", ctx.selectedOutletParticipating ? "pass" : "fail", "outlet_not_participating", { selected: ctx.selectedOutletId });
+  if (ctx.selectedOutletParticipating) add("outlet_participating", "pass", null, { selected: ctx.selectedOutletId });
+  else if (ctx.outletResolved === false || !ctx.selectedOutletId) add("outlet_participating", "unknown", "outlet_unreadable", { selected: ctx.selectedOutletId, resolved: false });
+  else add("outlet_participating", "fail", "outlet_not_participating", { selected: ctx.selectedOutletId });
   const cands = facts.merchant.candidates; const hit = cands.find((c) => c.outletId === ctx.selectedOutletId && c.score >= rules.outletMatch.minScore);
   if (!rules.outletMatch.required) add("outlet_match", "pass", null, { skipped: true }); else if (hit) add("outlet_match", "pass", null, hit); else if (!cands.length && !(facts.merchant.text ?? "").trim()) add("outlet_match", "unknown", "outlet_unreadable", { header: facts.merchant.text }); else if (!cands.length) add("outlet_match", "unknown", "outlet_mismatch", { header: facts.merchant.text, candidates: [] }); else add("outlet_match", "unknown", "outlet_mismatch", { header: facts.merchant.text, top: cands[0] });
   // 6. product + quantity (voided lines excluded; a printed "2KG" is a pack size, never a quantity)
@@ -53,8 +63,13 @@ export function evaluate(facts: Facts, rules: Rules, ctx: Context): Evaluation {
   const capP = rules.caps.perParticipantPerPeriod, capC = rules.caps.perParticipantCampaign;
   if (capP != null && ctx.periodEntryCount >= capP) add("entry_cap", "fail", "entry_cap_reached", { count: ctx.periodEntryCount, cap: capP }); else if (capC != null && ctx.campaignEntryCount >= capC) add("entry_cap", "fail", "entry_cap_reached", { count: ctx.campaignEntryCount, cap: capC }); else add("entry_cap", "pass", null, { unlimited: capP == null && capC == null });
   // 8. OCR confidence and cross-check warnings are information: low -> review, never fail
-  const conf = facts.quality.confidence; const qrBacked = facts.evidence?.qr?.status === "parsed";
-  if (conf != null && conf < rules.review.minOcrConfidence && !qrBacked) add("ocr_confidence", "unknown", "image_unreadable", { confidence: conf }); else add("ocr_confidence", "pass", null, { confidence: conf, qrBacked });
+  // Low OCR confidence is only excused when the revenue authority has confirmed
+  // the invoice, because then the facts being judged did not come from the
+  // pixels at all. It used to be excused whenever a QR code had been followed
+  // to *any* document, which inverted the control: the less readable the image,
+  // the more likely the fallback fired and the gate was skipped.
+  const conf = facts.quality.confidence; const fiscallyVerified = facts.evidence?.fiscal?.validated === true;
+  if (conf != null && conf < rules.review.minOcrConfidence && !fiscallyVerified) add("ocr_confidence", "unknown", "image_unreadable", { confidence: conf }); else add("ocr_confidence", "pass", null, { confidence: conf, fiscallyVerified });
   const disagree = facts.quality.warnings.filter((w) => /disagreement/.test(w));
   if (disagree.length) add("extraction_consistency", "unknown", "receipt_number_unreadable", { warnings: disagree }); else add("extraction_consistency", "pass", null);
 

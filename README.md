@@ -6,9 +6,11 @@ A WhatsApp-native promotion engine for a retail brand: consumers register, photo
 
 ## What it does
 
-- **Participant journey on WhatsApp**: menu, registration with terms acceptance, outlet selection from the participating list, receipt photo, immediate acknowledgement with a reference, decision message (entry awarded, not qualified with the reason, duplicate, please re-send, under review), entry status, winners, support hand-off.
-- **Receipt reading**: image validation and normalisation, offline OCR (tesseract) or Anthropic vision (configured by key), a deterministic parser and typed eligibility rules (integer grams, explicit thresholds, approved caps only). Every decision keeps the facts, the rule results and the rules version it was judged under.
-- **One award per purchase**: a canonical receipt identity (outlet, date, receipt number) with a total cross-check, image fingerprints for re-photographs, ownership disputes and identity conflicts routed to review, single-transaction commits.
+- **Participant journey on WhatsApp**: menu, registration with terms acceptance, then **capture-first** — send the receipt photo and the system works out the rest. Immediate acknowledgement with a reference, a decision message (entry awarded, not qualified with the reason, duplicate, please re-send, under review), entry status, winners, support hand-off. The participant is asked to *confirm*, and asked to *supply* only what nothing else could establish.
+- **Evidence-first verification** ([ADR 0010](docs/adr/0010-evidence-first-verification.md)): sources are ranked — ZIMRA FDMS > receipt image > OCR > AI > participant — and every assertion is recorded rather than collapsed. A receipt carrying a fiscal QR code is verified against the revenue authority's own record of the transaction; the photograph then corroborates that the document submitted *is* that transaction. Where the authority cannot answer, OCR and AI carry the decision. A lower-authority source never overwrites a higher one, but a contradiction is a finding, not a value to discard.
+- **Decisions from evidence, not a self-reported score**: a deterministic tier function over what each source asserted, whether they agree, whether the campaign rules passed, and what the duplicate and anomaly checks found. The verification model is one input and can only ever withhold qualification, never grant it.
+- **Receipt reading**: image validation and normalisation, offline OCR (tesseract) or Anthropic vision (configured by key), a deterministic parser and typed eligibility rules (integer grams, explicit thresholds, approved caps only). Every decision keeps the facts, the evidence ledger, the rule results and the rules version it was judged under.
+- **One award per purchase**: where a fiscal record exists the canonical identity is the transaction's own (`device:fiscalDay:receiptGlobalNo`), which does not depend on reading the paper correctly; otherwise outlet/date/receipt-number with a total cross-check. Image fingerprints for re-photographs, ownership disputes and identity conflicts routed to review, single-transaction commits.
 - **Review workspace**: queue with SLA, assignment, escalation, fact correction, duplicate resolution, decisions with participant messaging, safe reprocessing, entry disqualification with an independent approver when a draw is affected.
 - **Draws**: barrier checks, frozen snapshot with a committed seed, deterministic HMAC sortition, separation of duties (officer ≠ approver), integrity re-verification, void and re-run, an exportable audit bundle and an independent verifier (`npm run verify:draw`).
 - **Winners and claims**: contact with a claim reference, identity verification, acceptance with collection instructions, collection, expiry, alternates, publication as a separate revocable step, masked public listing.
@@ -21,7 +23,9 @@ TypeScript (Node 22) modular monolith · PostgreSQL 16 with Drizzle ORM · Expre
 
 ```
 packages/db       schema, migrations, migrator
-packages/core     domain: auth, audit, campaign, participant, conversation, media, extraction, eligibility, receipt pipeline, draws, winners, crm, whatsapp, ops
+packages/core     domain: auth, audit, campaign, participant, conversation, media, extraction,
+                  fiscal (ZIMRA FDMS, evidence ledger, tiers), eligibility, receipt pipeline,
+                  draws, winners, crm, whatsapp, ops
 apps/api          Express + tRPC server, webhook, media/export/bundle endpoints, static console
 apps/console      staff console (TapTap design system)
 tools/            preflight, migrate, seed, fixtures, benchmarks, restore rehearsal, verifier, smoke, e2e
@@ -52,14 +56,14 @@ npm run dev                     # API + console on http://127.0.0.1:8080 (worker
 | Command | What it proves |
 |---|---|
 | `npm run typecheck` · `npm run lint` | type-safe end to end (console included via `apps/console`), lint clean |
-| `npm test` | 93 tests: unit (parser, rules, draw engine), integration (journeys, security/RBAC/privacy, draws, reliability, review), real-OCR pipeline on the labelled fixtures |
+| `npm test` | 178 tests: unit (parser, rules, draw engine, evidence ledger, tier decisions, fiscal QR), integration (journeys, ZIMRA-first verification, security/RBAC/privacy, draws, draw capacity, reliability, review), real-OCR pipeline on the labelled fixtures |
 | `npm run bench:receipts` | extraction benchmark → `docs/testing/evidence/receipt-benchmark.md` |
 | `npm run bench:load` | throughput, latency and exactly-once evidence → `docs/testing/evidence/load-benchmark.md` |
 | `npm run restore:rehearsal` | dump, isolated restore, migrations, counts, audit chain and draw evidence → `docs/testing/evidence/restore-rehearsal.json` |
 | `npm run test:e2e` | Playwright run of the console: every role, every page, and the client UAT journey → `docs/testing/evidence/e2e-console.md` + screenshots |
 | `npm run verify:draw -- bundle.json` | independent recomputation of a draw from its exported bundle |
 | `npm run smoke` | post-deploy check of a running server |
-| `npm run check` | typecheck + lint + tests + console build + dependency audit |
+| `npm run check` | typecheck + lint + tests + console build + dependency audit — run by CI on every push (`.github/workflows/ci.yml`) |
 
 ## Environment variables
 
@@ -68,7 +72,8 @@ Generated from the configuration schema into `.env.example`; every variable is d
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md) — components, data flow, state machines, invariants
-- [docs/adr](docs/adr) — architecture decision records
+- [docs/adr](docs/adr) — architecture decision records ([0010](docs/adr/0010-evidence-first-verification.md) is the current verification architecture)
+- [docs/audit](docs/audit) — adversarial passes over this tree, with remediation status
 - [docs/security/threat-model.md](docs/security/threat-model.md), [role-matrix.md](docs/security/role-matrix.md), [data-lifecycle.md](docs/security/data-lifecycle.md)
 - [docs/client-decisions.md](docs/client-decisions.md) — D-01…D-22 with the test values in use
 - [docs/requirements-traceability.md](docs/requirements-traceability.md) — FR → code → test

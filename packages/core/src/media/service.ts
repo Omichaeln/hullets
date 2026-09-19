@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, lt, asc, isNotNull, sql } from "drizzle-orm";
 import { schema, type Db } from "@promo/db";
 import { newId } from "../util/ids.ts";
 import { inspect, normalise, quality, fingerprints } from "./images.ts";
@@ -23,11 +23,36 @@ export class MediaService {
   }
   async get(id: string) { const [a] = await this.db.select().from(mediaAssets).where(eq(mediaAssets.id, id)); return a ?? null; }
   async bytes(a: MediaAsset, { normalised = false } = {}) { if (a.status !== "stored") return null; return this.storage.get(normalised ? (a.normalizedKey ?? a.storageKey) : a.storageKey); }
-  /** Retention: remove bytes past expiry, keep the metadata row (status purged) so references stay resolvable. */
+  /**
+   * Retention: remove bytes past expiry, keep the metadata row (status purged)
+   * so references stay resolvable.
+   *
+   * The expiry predicate belongs in the query. It used to select 5,000
+   * arbitrary stored rows with no ORDER BY and filter them in JavaScript, so
+   * whether anything was purged at all depended on the physical order Postgres
+   * happened to return — which it does not guarantee. Raw receipt images are
+   * personal data under a stated retention period; that is not a schedule to
+   * leave to chance.
+   */
   async purgeExpired(limit = 200) {
-    const rows = await this.db.select().from(mediaAssets).where(and(eq(mediaAssets.status, "stored"))).limit(5000);
-    let n = 0; const now = Date.now();
-    for (const a of rows) { if (!a.expiresAt || Date.parse(a.expiresAt) > now) continue; await this.storage.delete(a.storageKey); if (a.normalizedKey) await this.storage.delete(a.normalizedKey); await this.db.update(mediaAssets).set({ status: "purged" }).where(eq(mediaAssets.id, a.id)); if (++n >= limit) break; }
+    const now = new Date().toISOString();
+    const rows = await this.db.select().from(mediaAssets)
+      .where(and(eq(mediaAssets.status, "stored"), isNotNull(mediaAssets.expiresAt), lt(mediaAssets.expiresAt, now)))
+      .orderBy(asc(mediaAssets.expiresAt))
+      .limit(Math.max(1, limit));
+    let n = 0;
+    for (const a of rows) {
+      await this.storage.delete(a.storageKey);
+      if (a.normalizedKey) await this.storage.delete(a.normalizedKey);
+      await this.db.update(mediaAssets).set({ status: "purged" }).where(eq(mediaAssets.id, a.id));
+      n++;
+    }
     return n;
+  }
+  /** How much is due for purging, so a stalled sweep is visible rather than silent. */
+  async retentionBacklog() {
+    const now = new Date().toISOString();
+    const [r] = await this.db.select({ due: sql<number>`count(*)::int`, oldest: sql<string | null>`min(${mediaAssets.expiresAt})` }).from(mediaAssets).where(and(eq(mediaAssets.status, "stored"), isNotNull(mediaAssets.expiresAt), lt(mediaAssets.expiresAt, now)));
+    return { due: r?.due ?? 0, oldest: r?.oldest ?? null };
   }
 }

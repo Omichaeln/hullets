@@ -23,7 +23,10 @@ describe("draws and winners", () => {
     const w0 = (await h.app.campaigns.periods(h.campaign.id)).find((p) => p.code === "W0")!; periodId = w0.id;
     let b = await h.app.draws.barrier(h.campaign.id, periodId); expect(b.blockers.map((x) => x.code)).toContain("PERIOD_OPEN");
     await expect(h.app.draws.freeze({ campaignId: h.campaign.id, periodId, actorId: officer })).rejects.toMatchObject({ code: "BLOCKED" });
-    const rev = await h.submit(phones[3], await h.simImage(h.simReceipt({ no: "" }))); expect(rev.submission?.status).toBe("review");
+    // A receipt whose number could not be read now waits on the participant
+    // rather than a reviewer — and still blocks the draw, because it is
+    // unresolved either way.
+    const rev = await h.submit(phones[3], await h.simImage(h.simReceipt({ no: "" }))); expect(rev.submission?.status).toBe("awaiting_participant");
     await h.closePeriod("W0");
     b = await h.app.draws.barrier(h.campaign.id, periodId); expect(b.blockers.map((x) => x.code)).toEqual(["UNRESOLVED_SUBMISSIONS"]); expect(b.eligible.length).toBe(10); expect(b.distinctParticipants).toBe(8);
     await expect(h.app.draws.freeze({ campaignId: h.campaign.id, periodId, actorId: officer, override: { allow: ["UNRESOLVED_SUBMISSIONS"], reason: "" } })).rejects.toMatchObject({ code: "VALIDATION" });
@@ -98,7 +101,7 @@ describe("draws and winners", () => {
     await h.app.winners.publish(promoted.id, ops); const pub = await h.app.winners.listPublic(h.campaign.id); expect(pub.length).toBe(1);
     expect(JSON.stringify(pub)).not.toMatch(/2637720000/); expect(JSON.stringify(pub)).not.toContain("Tester"); expect(pub[0]).toMatchObject({ prize: expect.any(String) });
     await h.app.winners.unpublish(promoted.id, ops, "name spelled wrong"); expect((await h.app.winners.listPublic(h.campaign.id)).length).toBe(0);
-    expect((await h.say(phones[0], "6")).replies[0]).toMatch(/No winners have been published/);
+    expect((await h.say(phones[0], "7")).replies[0]).toMatch(/No winners have been published/);
   });
   it("T-25: expiry of an unclaimed prize is driven by the claim deadline; prior winners are excluded from the next draw when the rule says so", async () => {
     const ws = (await h.app.winners.list({ drawId })).map((r) => r.w); const w3 = ws.find((w) => w.status === "selected")!;

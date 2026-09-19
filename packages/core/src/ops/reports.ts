@@ -29,6 +29,21 @@ export class ReportService {
       draws_by_status: await this.db.select({ k: draws.status, n: sql<number>`count(*)::int` }).from(draws).where(eq(draws.campaignId, campaignId)).groupBy(draws.status),
     };
   }
+  /**
+   * How many rows an export would contain. An audit export that silently stops
+   * at the cap reads as complete and is not; the caller compares this against
+   * what it received and says so.
+   */
+  async exportCount(scope: string, campaignId: string): Promise<number> {
+    const n = sql<number>`count(*)::int`;
+    const [r] = scope === "submissions" ? await this.db.select({ n }).from(submissions).where(eq(submissions.campaignId, campaignId))
+      : scope === "entries" ? await this.db.select({ n }).from(entries).where(eq(entries.campaignId, campaignId))
+      : scope === "winners" ? await this.db.select({ n }).from(winners).where(eq(winners.campaignId, campaignId))
+      : scope === "participants" ? await this.db.select({ n }).from(participants).innerJoin(enrollments, eq(enrollments.participantId, participants.id)).where(eq(enrollments.campaignId, campaignId))
+      : scope === "outlets" ? await this.db.select({ n }).from(outlets)
+      : [{ n: 0 }];
+    return r?.n ?? 0;
+  }
   /** Export rows for the auditor; identity and phone numbers never included. */
   async exportRows(scope: string, campaignId: string, cap = 50_000) {
     switch (scope) {

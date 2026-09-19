@@ -135,7 +135,7 @@ describe("CRM contract adapter against the local receiver (T-26/T-27)", () => {
     const ev = (await h.app.crm.list({ status: "retryable_failure" }))[0]; expect(ev).toBeTruthy(); expect(ev.nextAttemptAt).toBeTruthy();
     recv.setFault("none"); await h.app.worker.drain(); expect((await h.db.select().from(schema.crmEvents).where(eq(schema.crmEvents.id, ev.id)))[0].status).toBe("retryable_failure");
     expect(await h.app.crm.retry(ev.id)).toBe(true); await h.app.worker.drain(); expect((await h.db.select().from(schema.crmEvents).where(eq(schema.crmEvents.id, ev.id)))[0].status).toBe("delivered");
-    const rec = (v: number, name: string) => h.app.crm.emit({ entityType: "participant", entityId: "ptc_stale_test", entityVersion: v, payload: { firstName: name, surname: "X", phone: "***0009", location: "Harare", status: "active" } });
+    const rec = (v: number, name: string) => h.app.crm.emit(h.app.db, { entityType: "participant", entityId: "ptc_stale_test", entityVersion: v, payload: { firstName: name, surname: "X", phone: "***0009", location: "Harare", status: "active" } });
     await rec(2, "Newer"); await h.app.worker.drain(); await rec(1, "Stale"); await h.app.worker.drain();
     const key = h.app.crm.key("participant", "ptc_stale_test"); expect(recv.records.get(`participant:${key}`)?.first_name).toBe("Newer"); expect((await h.app.crm.list({ status: "permanent_failure" })).some((e) => /superseded/.test(e.lastError ?? ""))).toBe(true);
     // and the vendor itself refuses an older version if one ever reaches it
